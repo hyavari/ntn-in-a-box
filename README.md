@@ -50,6 +50,50 @@ SDK/CLI · virtual UE   store-and-forward     REST endpoints
 - **IMS Adapter** is pluggable: a mock/loopback backend for anyone with no
   telecom core, and a real IMS backend for real-phone delivery.
 
+## Kernel internals (Step 0, in progress)
+
+### What each piece is responsible for
+
+| Package | Responsibility | Status |
+|---|---|---|
+| `profile` | Parses and validates a YAML pass-shape profile into a `Profile` struct. Pure data — no time, no behavior. | Done |
+| `condition` | Given a `Profile` + a fixed starting instant ("epoch"), answers "at this instant, what's the coverage/link state?" via `Evaluate(now)`. Stateless and pull-based — you ask it, it answers; it doesn't know or care if anyone's listening. | Done |
+| `eventbus` | Receives candidate state updates (`Publish...`), decides whether each one is worth telling subscribers about (throttling), and fans it out to whoever subscribed. Push-based. | Done |
+| *(driver loop)* | Nothing currently calls `condition.Evaluate()` on a loop and feeds the results into `eventbus.Bus`. This is the missing link between the two — a real gap, not a deferred design choice. | **Not built** |
+| `device` | Registry of virtual UEs / real phones. | Stub only |
+| `imsadapter` | Mock message delivery backend (real IMS comes in a later step). | Stub only |
+| `apihost` | HTTP server exposing all of this. | Stub only |
+
+### Data flow
+
+```
+testdata/profiles/*.yaml
+        │
+        │  profile.LoadFile()  — parse + validate
+        ▼
+  profile.Profile                 (static: describes the schedule + curves)
+        │
+        │  condition.NewEvaluator(profile, epoch)
+        ▼
+  condition.Evaluator
+        │
+        │  Evaluate(now)  — called on demand, for any instant "now"
+        ▼
+  CoverageState + LinkState       (dynamic: the answer for that instant)
+        ┆
+        ┆  <- nothing built yet calls this on a loop and feeds it below
+        ┆     (see "driver loop" in the table above)
+        ▼
+  eventbus.Bus
+        │  PublishCoverageEvent()  — every call delivered immediately
+        │  PublishLinkState()      — throttled: >5% delta in any field,
+        │                            or a 250ms heartbeat if unchanged
+        ▼
+  Subscriber handlers              (future: Dev Sandbox, Messaging/
+                                     Emergency, Service API modules
+                                     register here once they exist)
+```
+
 ## Roadmap
 
 | Step | Delivers | Depends on real IMS? |
