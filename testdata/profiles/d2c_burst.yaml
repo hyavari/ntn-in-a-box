@@ -1,0 +1,45 @@
+name: d2c_burst
+description: >
+  Direct-to-Cell (D2C): a satellite talks directly to an unmodified
+  phone's normal cellular radio (Starlink Direct to Cell, AST
+  SpaceMobile). Currently a narrowband, messaging-first service (SMS/
+  basic data), not a broadband link — modeled here as short,
+  opportunistic connectivity bursts rather than a sustained pass.
+  This profile is the least well-grounded of the three sample
+  profiles: D2C is an emerging service (beta rollout 2024-2026) with
+  little published, detailed measurement data on delay/jitter/loss
+  curves. See testdata/profiles/README.md for what little is sourced
+  vs. estimated. Window/period timing is illustrative, same caveat as
+  leo_pass_90s.
+
+schedule:
+  mode: periodic
+  period_sec: 300
+  window_sec: 20
+  lookahead_sec: 15
+
+curves:
+  # Not individually sourced. Estimated as moderate LEO-class
+  # propagation delay plus narrowband signaling/framing overhead
+  # (narrowband links typically add latency beyond raw propagation
+  # due to scheduling/access constraints); no published per-message
+  # delay curve was found for this service.
+  delay_ms:
+    - { offset_sec: 0, value: 200 }
+  # Not individually sourced; illustrative.
+  jitter_ms:
+    - { offset_sec: 0, value: 30 }
+  # Not individually sourced; illustrative estimate for a weak-margin
+  # opportunistic link (phones use unmodified terrestrial antennas,
+  # not a dedicated satellite terminal, so link margin is inherently
+  # worse than a purpose-built LEO broadband terminal).
+  loss_pct:
+    - { offset_sec: 0, value: 5 }
+  # Loosely informed by the one measurement found (arXiv:2506.00283:
+  # ~3 Mbps per beam, shared across users in that beam) but this is
+  # NOT a per-device figure — a single device's realistic narrowband
+  # allocation for basic texting/small data is far below the per-beam
+  # total. 64 kbps is an illustrative estimate for that per-device
+  # share, not a cited number.
+  bandwidth_kbps:
+    - { offset_sec: 0, value: 64 }

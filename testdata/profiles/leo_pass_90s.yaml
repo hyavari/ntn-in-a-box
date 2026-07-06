@@ -1,0 +1,58 @@
+name: leo_pass_90s
+description: >
+  A single-satellite LEO pass: the satellite rises, is overhead with a
+  good link, then sets — followed by a real out-of-coverage gap until
+  the next pass. This models a single-satellite-visibility system (e.g.
+  Iridium/Swarm-style store-and-forward messaging satellites), not a
+  Starlink-style mega-constellation, which uses seamless handovers
+  specifically so users never see a gap at all.
+  Window/period timing (90s window, 600s period) is an illustrative,
+  fast-dev-loop value, not a measurement of any specific real
+  constellation's revisit schedule — that depends entirely on satellite
+  count/altitude/inclination, which isn't specified anywhere in the
+  project design. The curve *values* below are grounded in published
+  measurements (see testdata/profiles/README.md for sources); only the
+  timing is illustrative.
+
+schedule:
+  mode: periodic
+  period_sec: 600
+  window_sec: 90
+  lookahead_sec: 30
+
+curves:
+  # Steady-state (good elevation, clear link margin): ~20-60ms is the
+  # commonly measured real-world range for LEO broadband in good
+  # conditions (e.g. Starlink). Edge values reflect the handover/
+  # acquisition transition measured in arXiv:2601.08439 (~140ms at
+  # pass start, ~75ms at pass end) rather than an arbitrary spike.
+  delay_ms:
+    - { offset_sec: 0, value: 150 }
+    - { offset_sec: 15, value: 40 }
+    - { offset_sec: 75, value: 40 }
+    - { offset_sec: 90, value: 100 }
+  # Not directly sourced (no published per-pass jitter curve found);
+  # engineering estimate of relative degradation near the horizon due
+  # to weaker link margin, not a cited measurement.
+  jitter_ms:
+    - { offset_sec: 0, value: 40 }
+    - { offset_sec: 15, value: 5 }
+    - { offset_sec: 75, value: 5 }
+    - { offset_sec: 90, value: 40 }
+  # Not directly sourced; engineering estimate. Near-horizon loss is
+  # qualitatively well-documented (weak SNR -> more retransmissions)
+  # but a precise universal percentage wasn't found in the literature
+  # reviewed for this profile.
+  loss_pct:
+    - { offset_sec: 0, value: 10 }
+    - { offset_sec: 15, value: 0.2 }
+    - { offset_sec: 75, value: 0.2 }
+    - { offset_sec: 90, value: 10 }
+  # Not directly sourced; illustrative figures within the general
+  # range reported for real-world LEO broadband throughput.
+  bandwidth_kbps:
+    - { offset_sec: 0, value: 2000 }
+    - { offset_sec: 15, value: 20000 }
+    - { offset_sec: 75, value: 20000 }
+    - { offset_sec: 90, value: 2000 }
+
