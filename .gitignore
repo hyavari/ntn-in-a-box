@@ -1,0 +1,21 @@
+# Internal design/planning docs - not published to the repo
+docs/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/bin/
+/dist/
+
+# Go workspace/build
+vendor/
+
+# Editor/OS
+.DS_Store
+.idea/
+.vscode/

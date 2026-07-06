@@ -1,0 +1,20 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - errcheck      # unchecked errors
+    - govet         # suspicious constructs
+    - staticcheck   # bugs, style, simplifications (includes gosimple/stylecheck)
+    - unused        # unused code
+    - ineffassign   # ineffectual assignments
+    - gocritic      # broader style/perf checks
+    - revive        # configurable style linter (golint successor)
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+run:
+  timeout: 5m
