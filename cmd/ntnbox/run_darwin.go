@@ -56,15 +56,18 @@ func runViaDarwinDocker(args []string) error {
 		dockerArgs = append(dockerArgs, "-it")
 	}
 
-	// If the command is a local file, bind-mount it too.
+	// If the command is a local file (starts with ./ or /), bind-mount it.
+	// Otherwise let it resolve from the container's PATH.
 	if len(cmdArgs) > 0 {
 		cmdBin := cmdArgs[0]
-		if absBin, err := filepath.Abs(cmdBin); err == nil {
-			if info, err := os.Stat(absBin); err == nil && !info.IsDir() {
-				dockerArgs = append(dockerArgs,
-					"-v", absBin+":/app/"+filepath.Base(absBin)+":ro",
-				)
-				cmdArgs[0] = "/app/" + filepath.Base(absBin)
+		if len(cmdBin) > 0 && (cmdBin[0] == '/' || (len(cmdBin) > 1 && cmdBin[:2] == "./")) {
+			if absBin, err := filepath.Abs(cmdBin); err == nil {
+				if info, err := os.Stat(absBin); err == nil && !info.IsDir() {
+					dockerArgs = append(dockerArgs,
+						"-v", absBin+":/app/"+filepath.Base(absBin)+":ro",
+					)
+					cmdArgs[0] = "/app/" + filepath.Base(absBin)
+				}
 			}
 		}
 	}

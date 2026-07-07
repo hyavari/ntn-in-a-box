@@ -33,11 +33,11 @@ func TestNew(t *testing.T) {
 	if ns.Name != "ntnbox-ue-1" {
 		t.Errorf("Name = %q, want %q", ns.Name, "ntnbox-ue-1")
 	}
-	if ns.VethOuter != "veth-ue-1-o" {
-		t.Errorf("VethOuter = %q, want %q", ns.VethOuter, "veth-ue-1-o")
+	if ns.VethOuter != "vth-ue-1-o" {
+		t.Errorf("VethOuter = %q, want %q", ns.VethOuter, "vth-ue-1-o")
 	}
-	if ns.VethInner != "veth-ue-1-i" {
-		t.Errorf("VethInner = %q, want %q", ns.VethInner, "veth-ue-1-i")
+	if ns.VethInner != "vth-ue-1-i" {
+		t.Errorf("VethInner = %q, want %q", ns.VethInner, "vth-ue-1-i")
 	}
 	if ns.Subnet != "10.200.0" {
 		t.Errorf("Subnet = %q, want %q", ns.Subnet, "10.200.0")
@@ -65,12 +65,12 @@ func TestCreateCommandSequence(t *testing.T) {
 	// Verify key commands in order.
 	wantContains := []string{
 		"ip netns add ntnbox-ue-1",
-		"ip link add veth-ue-1-o type veth peer name veth-ue-1-i",
-		"ip link set veth-ue-1-i netns ntnbox-ue-1",
-		"ip addr add 10.200.0.1/30 dev veth-ue-1-o",
-		"ip netns exec ntnbox-ue-1 ip addr add 10.200.0.2/30 dev veth-ue-1-i",
-		"ip link set veth-ue-1-o up",
-		"ip netns exec ntnbox-ue-1 ip link set veth-ue-1-i up",
+		"ip link add vth-ue-1-o type veth peer name vth-ue-1-i",
+		"ip link set vth-ue-1-i netns ntnbox-ue-1",
+		"ip addr add 10.200.0.1/30 dev vth-ue-1-o",
+		"ip netns exec ntnbox-ue-1 ip addr add 10.200.0.2/30 dev vth-ue-1-i",
+		"ip link set vth-ue-1-o up",
+		"ip netns exec ntnbox-ue-1 ip link set vth-ue-1-i up",
 		"ip netns exec ntnbox-ue-1 ip link set lo up",
 		"ip netns exec ntnbox-ue-1 ip route add default via 10.200.0.1",
 		"iptables -t nat -A POSTROUTING -s 10.200.0.0/30 -j MASQUERADE",

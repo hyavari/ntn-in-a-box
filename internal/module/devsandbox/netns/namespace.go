@@ -47,11 +47,21 @@ type Namespace struct {
 func New(deviceID string, exec Executor) *Namespace {
 	return &Namespace{
 		Name:      "ntnbox-" + deviceID,
-		VethOuter: "veth-" + deviceID + "-o",
-		VethInner: "veth-" + deviceID + "-i",
+		VethOuter: "vth-" + short(deviceID) + "-o",
+		VethInner: "vth-" + short(deviceID) + "-i",
 		Subnet:    "10.200.0",
 		Exec:      exec,
 	}
+}
+
+// short truncates an ID to fit within Linux's 15-char interface name
+// limit (15 - len("vth-") - len("-o") = 9 chars max).
+func short(id string) string {
+	const maxLen = 9
+	if len(id) <= maxLen {
+		return id
+	}
+	return id[:maxLen]
 }
 
 // Create sets up the network namespace, veth pair, addressing, routing,
