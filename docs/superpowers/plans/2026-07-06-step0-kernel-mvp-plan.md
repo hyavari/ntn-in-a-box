@@ -2,9 +2,9 @@
 
 Ref design: `docs/superpowers/specs/2026-07-03-ntn-in-a-box-design.md`
 
-**Resume point (last updated 2026-07-07):** Tasks 1-8 done and pushed.
-**Next up: Task 9 — API host with minimal HTTP routes**
-(`internal/kernel/apihost`).
+**Resume point (last updated 2026-07-07):** Tasks 1-9 done and pushed.
+**Next up: Task 10 — CLI skeleton** (`cmd/ntnbox`): `ntnbox serve
+--profile <name>` wires up kernel + API host.
 
 ## Progress (update this section as tasks complete — this is the
 ## source of truth for resuming across sessions, not just tool state)
@@ -70,8 +70,16 @@ Ref design: `docs/superpowers/specs/2026-07-03-ntn-in-a-box-design.md`
       delivered/failed), ctx cancellation stops receipts, injectable
       clock for deterministic testing, atomic monotonic IDs,
       concurrent-safe. 6 tests pass with `-race`. README updated.
-- [ ] Task 9 — API host with minimal HTTP routes
-      (`internal/kernel/apihost`). **Next.**
+- [x] Task 9 — API host with minimal HTTP routes
+      (`internal/kernel/apihost`). `Server` wires profile store +
+      device.Registry + per-device condition.Evaluator. Routes:
+      GET /health, GET /profiles, GET /profiles/{name}, POST /devices,
+      GET /devices, GET /devices/{id}, GET /devices/{id}/condition.
+      Go 1.22+ ServeMux pattern routing, stdlib only. 12 integration
+      tests via httptest. README updated with apihost in table + data
+      flow.
+- [ ] Task 10 — CLI skeleton: `ntnbox serve --profile <name>`
+      (`cmd/ntnbox`). **Next.**
 - [ ] Task 10 — CLI skeleton: `ntnbox serve --profile <name>`
       (`cmd/ntnbox`).
 - [ ] Task 11 — End-to-end manual check of Step 0 kernel MVP.

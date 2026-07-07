@@ -62,7 +62,7 @@ SDK/CLI · virtual UE   store-and-forward     REST endpoints
 | `device` | In-memory registry of virtual UEs and real-phone stubs. Each device has an ID, a type, and a profile name. The wiring layer (apihost/CLI) creates a per-device Evaluator + Bus keyed by device ID. | Done |
 | `imsadapter` | Mock IMS backend: simulates message delivery lifecycle (queued → in-flight → delivered/failed) with configurable failure injection and timing. Satisfies `pkg/module.IMSAdapter`. No real protocol — just state transitions and receipt callbacks. | Done |
 | *(driver loop)* | Nothing currently calls `condition.Evaluate()` on a loop and feeds the results into `eventbus.Bus`. This is the missing link between the two — a real gap, not a deferred design choice. | **Not built** |
-| `apihost` | HTTP server exposing all of this. | Stub only |
+| `apihost` | Minimal HTTP server (stdlib `net/http`, Go 1.22+ ServeMux routing). Routes: `GET /health`, `GET /profiles`, `GET /profiles/{name}`, `POST /devices`, `GET /devices`, `GET /devices/{id}`, `GET /devices/{id}/condition`. Wires profile store + device registry + per-device Evaluator together into a queryable surface. | Done |
 
 ### Data flow
 
@@ -94,10 +94,19 @@ testdata/profiles/*.yaml
                                      register here once they exist)
 
 
+  apihost.Server                   (HTTP surface — wires it all together)
+        │
+        │  POST /devices           → device.Registry.Register()
+        │                            + condition.NewEvaluator(profile, now)
+        │  GET /devices/{id}/condition
+        │                          → evaluator.Evaluate(time.Now())
+        │  GET /profiles           → list loaded profiles
+        │  GET /health             → liveness check
+        ▼
   device.Registry                  (parallel concern — not in the
-        │                            event path, but the wiring layer
-        │  Register / Get / List     uses it to decide which profile +
-        ▼                            evaluator + bus to create per device)
+        │                            event path, but apihost uses it
+        │  Register / Get / List     to decide which profile + evaluator
+        ▼                            + bus to create per device)
   Device { ID, Type, ProfileName }
 ```
 
