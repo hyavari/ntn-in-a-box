@@ -59,8 +59,8 @@ SDK/CLI · virtual UE   store-and-forward     REST endpoints
 | `profile` | Parses and validates a YAML pass-shape profile into a `Profile` struct. Pure data — no time, no behavior. | Done |
 | `condition` | Given a `Profile` + a fixed starting instant ("epoch"), answers "at this instant, what's the coverage/link state?" via `Evaluate(now)`. Stateless and pull-based — you ask it, it answers; it doesn't know or care if anyone's listening. | Done |
 | `eventbus` | Receives candidate state updates (`Publish...`), decides whether each one is worth telling subscribers about (throttling), and fans it out to whoever subscribed. Push-based. | Done |
+| `device` | In-memory registry of virtual UEs and real-phone stubs. Each device has an ID, a type, and a profile name. The wiring layer (apihost/CLI) creates a per-device Evaluator + Bus keyed by device ID. | Done |
 | *(driver loop)* | Nothing currently calls `condition.Evaluate()` on a loop and feeds the results into `eventbus.Bus`. This is the missing link between the two — a real gap, not a deferred design choice. | **Not built** |
-| `device` | Registry of virtual UEs / real phones. | Stub only |
 | `imsadapter` | Mock message delivery backend (real IMS comes in a later step). | Stub only |
 | `apihost` | HTTP server exposing all of this. | Stub only |
 
@@ -92,6 +92,13 @@ testdata/profiles/*.yaml
   Subscriber handlers              (future: Dev Sandbox, Messaging/
                                      Emergency, Service API modules
                                      register here once they exist)
+
+
+  device.Registry                  (parallel concern — not in the
+        │                            event path, but the wiring layer
+        │  Register / Get / List     uses it to decide which profile +
+        ▼                            evaluator + bus to create per device)
+  Device { ID, Type, ProfileName }
 ```
 
 ## Roadmap
