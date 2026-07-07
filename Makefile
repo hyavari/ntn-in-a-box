@@ -1,4 +1,4 @@
-.PHONY: build test fmt lint vet check
+.PHONY: build test fmt lint vet check docker
 
 build:
 	go build ./...
@@ -18,3 +18,7 @@ lint:
 
 # Run everything CI would run.
 check: fmt vet lint test build
+
+# Build the Docker image for Linux-native ntnbox run.
+docker:
+	docker build -t ntnbox:latest .
