@@ -2,9 +2,9 @@
 
 Ref design: `docs/superpowers/specs/2026-07-03-ntn-in-a-box-design.md`
 
-**Resume point (last updated 2026-07-07):** Tasks 1-7 done and pushed.
-**Next up: Task 8 — IMS Adapter interface + mock backend**
-(`internal/kernel/imsadapter`).
+**Resume point (last updated 2026-07-07):** Tasks 1-8 done and pushed.
+**Next up: Task 9 — API host with minimal HTTP routes**
+(`internal/kernel/apihost`).
 
 ## Progress (update this section as tasks complete — this is the
 ## source of truth for resuming across sessions, not just tool state)
@@ -63,10 +63,15 @@ Ref design: `docs/superpowers/specs/2026-07-03-ntn-in-a-box-design.md`
       stutter (`device.DeviceType` → `device.Type`), fixed. Tests
       include concurrency (100 goroutines, `-race`). README updated
       with device registry in the kernel internals table + data flow.
-- [ ] Task 8 — IMS Adapter interface + mock backend
-      (`internal/kernel/imsadapter`). **Next.**
+- [x] Task 8 — IMS Adapter interface + mock backend
+      (`internal/kernel/imsadapter`). `MockAdapter` satisfies
+      `pkg/module.IMSAdapter`: configurable FailRate/QueueDelay/
+      InFlightDelay, async receipt callbacks (queued → in-flight →
+      delivered/failed), ctx cancellation stops receipts, injectable
+      clock for deterministic testing, atomic monotonic IDs,
+      concurrent-safe. 6 tests pass with `-race`. README updated.
 - [ ] Task 9 — API host with minimal HTTP routes
-      (`internal/kernel/apihost`).
+      (`internal/kernel/apihost`). **Next.**
 - [ ] Task 10 — CLI skeleton: `ntnbox serve --profile <name>`
       (`cmd/ntnbox`).
 - [ ] Task 11 — End-to-end manual check of Step 0 kernel MVP.

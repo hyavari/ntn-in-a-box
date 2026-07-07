@@ -60,8 +60,8 @@ SDK/CLI · virtual UE   store-and-forward     REST endpoints
 | `condition` | Given a `Profile` + a fixed starting instant ("epoch"), answers "at this instant, what's the coverage/link state?" via `Evaluate(now)`. Stateless and pull-based — you ask it, it answers; it doesn't know or care if anyone's listening. | Done |
 | `eventbus` | Receives candidate state updates (`Publish...`), decides whether each one is worth telling subscribers about (throttling), and fans it out to whoever subscribed. Push-based. | Done |
 | `device` | In-memory registry of virtual UEs and real-phone stubs. Each device has an ID, a type, and a profile name. The wiring layer (apihost/CLI) creates a per-device Evaluator + Bus keyed by device ID. | Done |
+| `imsadapter` | Mock IMS backend: simulates message delivery lifecycle (queued → in-flight → delivered/failed) with configurable failure injection and timing. Satisfies `pkg/module.IMSAdapter`. No real protocol — just state transitions and receipt callbacks. | Done |
 | *(driver loop)* | Nothing currently calls `condition.Evaluate()` on a loop and feeds the results into `eventbus.Bus`. This is the missing link between the two — a real gap, not a deferred design choice. | **Not built** |
-| `imsadapter` | Mock message delivery backend (real IMS comes in a later step). | Stub only |
 | `apihost` | HTTP server exposing all of this. | Stub only |
 
 ### Data flow
