@@ -2,9 +2,8 @@
 
 Ref design: `docs/superpowers/specs/2026-07-03-ntn-in-a-box-design.md`
 
-**Resume point (last updated 2026-07-07):** Tasks 1-9 done and pushed.
-**Next up: Task 10 — CLI skeleton** (`cmd/ntnbox`): `ntnbox serve
---profile <name>` wires up kernel + API host.
+**Resume point (last updated 2026-07-07):** All tasks (1-11) complete.
+**Step 0 is done.** Next step: Step 1 — Dev Sandbox module.
 
 ## Progress (update this section as tasks complete — this is the
 ## source of truth for resuming across sessions, not just tool state)
@@ -78,11 +77,20 @@ Ref design: `docs/superpowers/specs/2026-07-03-ntn-in-a-box-design.md`
       Go 1.22+ ServeMux pattern routing, stdlib only. 12 integration
       tests via httptest. README updated with apihost in table + data
       flow.
-- [ ] Task 10 — CLI skeleton: `ntnbox serve --profile <name>`
-      (`cmd/ntnbox`). **Next.**
-- [ ] Task 10 — CLI skeleton: `ntnbox serve --profile <name>`
-      (`cmd/ntnbox`).
-- [ ] Task 11 — End-to-end manual check of Step 0 kernel MVP.
+- [x] Task 10 — CLI skeleton: `ntnbox serve --profile <name>`
+      (`cmd/ntnbox`). Parses --profile (required) and --addr
+      (default :8080), loads profile, wires apihost.Server +
+      device.Registry, graceful shutdown on SIGINT/SIGTERM.
+- [x] Task 11 — End-to-end manual check of Step 0 kernel MVP.
+      Built binary, ran `ntnbox serve --profile leo_pass_90s.yaml`,
+      curled all endpoints: health OK, profiles list/get, device
+      registration, condition query returns in_coverage=true with
+      interpolated curve values matching the profile (delay ~150ms
+      near window start, bandwidth ~2000kbps). Error cases return
+      proper 404 JSON. Graceful shutdown works.
+
+**Step 0 is complete.** All 11 tasks done. Next: Step 1 (Dev Sandbox
+module).
 
 To resume this work in a new session: read this file's Progress
 section first, then `docs/superpowers/specs/2026-07-03-ntn-in-a-box-design.md`

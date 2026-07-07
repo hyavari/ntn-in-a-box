@@ -7,8 +7,9 @@ that operators currently keep closed. Built so both real phones and
 pure-software apps can develop and test against realistic NTN conditions
 without any telecom hardware.
 
-> Status: early design/development. Nothing runnable yet — see
-> [Roadmap](#roadmap) below.
+> Status: **Step 0 (Kernel MVP) complete.** The kernel builds, runs,
+> and serves a queryable API for NTN condition simulation. Next: Step 1
+> (Dev Sandbox module). See [Roadmap](#roadmap) below.
 
 ## Why
 
@@ -50,7 +51,7 @@ SDK/CLI · virtual UE   store-and-forward     REST endpoints
 - **IMS Adapter** is pluggable: a mock/loopback backend for anyone with no
   telecom core, and a real IMS backend for real-phone delivery.
 
-## Kernel internals (Step 0, in progress)
+## Kernel internals (Step 0, complete)
 
 ### What each piece is responsible for
 
@@ -108,6 +109,30 @@ testdata/profiles/*.yaml
         │  Register / Get / List     to decide which profile + evaluator
         ▼                            + bus to create per device)
   Device { ID, Type, ProfileName }
+```
+
+## Quick start
+
+```bash
+# Build
+go build -o ntnbox ./cmd/ntnbox/
+
+# Start the kernel API with the LEO pass profile
+./ntnbox serve --profile testdata/profiles/leo_pass_90s.yaml
+
+# In another terminal:
+curl http://localhost:8080/health
+# {"status":"ok"}
+
+# Register a virtual UE device
+curl -X POST http://localhost:8080/devices \
+  -H "Content-Type: application/json" \
+  -d '{"id":"ue-1","type":"virtual_ue","profile_name":"leo_pass_90s"}'
+
+# Query its current NTN condition (coverage + link state)
+curl http://localhost:8080/devices/ue-1/condition
+# {"in_coverage":true,"elapsed_sec":2.3,"until_next_transition_sec":87.7,
+#  "delay_ms":135.6,"jitter_ms":28.3,"loss_pct":7.1,"bandwidth_kbps":4400}
 ```
 
 ## Roadmap
