@@ -62,7 +62,7 @@ SDK/CLI · virtual UE   store-and-forward     REST endpoints
 | `eventbus` | Receives candidate state updates (`Publish...`), decides whether each one is worth telling subscribers about (throttling), and fans it out to whoever subscribed. Push-based. | Done |
 | `device` | In-memory registry of virtual UEs and real-phone stubs. Each device has an ID, a type, and a profile name. The wiring layer (apihost/CLI) creates a per-device Evaluator + Bus keyed by device ID. | Done |
 | `imsadapter` | Mock IMS backend: simulates message delivery lifecycle (queued → in-flight → delivered/failed) with configurable failure injection and timing. Satisfies `pkg/module.IMSAdapter`. No real protocol — just state transitions and receipt callbacks. | Done |
-| *(driver loop)* | Nothing currently calls `condition.Evaluate()` on a loop and feeds the results into `eventbus.Bus`. This is the missing link between the two — a real gap, not a deferred design choice. | **Not built** |
+| *(driver loop)* | Ticks every 250ms, evaluates the Condition Engine, detects coverage transitions (including lookahead notices), and publishes events to the event bus. The bridge between the pull-based Evaluator and the push-based bus. | Done |
 | `apihost` | Minimal HTTP server (stdlib `net/http`, Go 1.22+ ServeMux routing). Routes: `GET /health`, `GET /profiles`, `GET /profiles/{name}`, `POST /devices`, `GET /devices`, `GET /devices/{id}`, `GET /devices/{id}/condition`. Wires profile store + device registry + per-device Evaluator together into a queryable surface. | Done |
 
 ### Data flow
@@ -78,12 +78,13 @@ testdata/profiles/*.yaml
         ▼
   condition.Evaluator
         │
-        │  Evaluate(now)  — called on demand, for any instant "now"
+        │  Evaluate(now)  — called every 250ms by the driver loop
         ▼
   CoverageState + LinkState       (dynamic: the answer for that instant)
-        ┆
-        ┆  <- nothing built yet calls this on a loop and feeds it below
-        ┆     (see "driver loop" in the table above)
+        │
+        │  driver.Loop publishes to the bus:
+        │    - CoverageEvent on transitions + lookahead
+        │    - LinkState while in coverage (bus throttles)
         ▼
   eventbus.Bus
         │  PublishCoverageEvent()  — every call delivered immediately

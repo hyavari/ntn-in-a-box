@@ -2,13 +2,22 @@
 
 Ref design: `docs/superpowers/specs/2026-07-07-step1-dev-sandbox-design.md`
 
-**Resume point (last updated 2026-07-07):** Plan created, no tasks
-started yet. **Next up: Task 1 — Driver loop.**
+**Resume point (last updated 2026-07-07):** Task 1 done. **Next up:
+Task 2 — Netem shim.**
 
 ## Progress
 
-- [ ] Task 1 — Driver loop (`internal/kernel/driver`)
-- [ ] Task 2 — Netem shim (`internal/module/devsandbox/netem`)
+- [x] Task 1 — Driver loop (`internal/kernel/driver`). `Loop` struct
+      with Config (Evaluator, Bus, LookaheadSec, TickCh, Interval, Now).
+      `Run(ctx)` ticks 250ms, evaluates, detects coverage transitions
+      (including initial state announcement), fires lookahead events
+      (window_closing/window_opening when UntilNextTransition <=
+      LookaheadSec), publishes link state while in coverage. Accepts
+      injectable tick channel + clock for testing. 4 tests pass with
+      `-race`: coverage transitions, link state published, no link
+      state out of coverage, continuous mode. README updated (driver
+      loop row → Done, data flow diagram updated).
+- [ ] Task 2 — Netem shim (`internal/module/devsandbox/netem`). **Next.**
 - [ ] Task 3 — Namespace wrapper (`internal/module/devsandbox/netns`)
 - [ ] Task 4 — Dev Sandbox module (`internal/module/devsandbox`)
 - [ ] Task 5 — `/echo` endpoint in apihost
