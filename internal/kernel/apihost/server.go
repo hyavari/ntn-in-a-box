@@ -66,6 +66,7 @@ func (s *Server) ListenAndServe(addr string) error {
 
 func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /health", s.handleHealth)
+	s.mux.HandleFunc("GET /echo", s.handleEcho)
 	s.mux.HandleFunc("GET /profiles", s.handleListProfiles)
 	s.mux.HandleFunc("GET /profiles/{name}", s.handleGetProfile)
 	s.mux.HandleFunc("POST /devices", s.handleRegisterDevice)
@@ -76,6 +77,10 @@ func (s *Server) registerRoutes() {
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleEcho(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"ts": time.Now().Format(time.RFC3339)})
 }
 
 func (s *Server) handleListProfiles(w http.ResponseWriter, _ *http.Request) {
