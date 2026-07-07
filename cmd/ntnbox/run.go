@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"runtime"
 	"syscall"
 	"time"
 
@@ -22,14 +21,19 @@ import (
 	"github.com/hyavari/ntn-in-a-box/internal/module/devsandbox/netns"
 )
 
+// errProxyComplete signals that the Docker proxy ran the command
+// successfully — not a real error, just a control-flow sentinel.
+var errProxyComplete = errors.New("proxy complete")
+
 func runRun(args []string) error {
-	if runtime.GOOS == "darwin" {
-		return errors.New("ntnbox run requires Linux network namespaces.\n" +
-			"On macOS, install Docker Desktop and use:\n" +
-			"  docker run --rm --privileged ntnbox:latest run --profile /profiles/<name> -- <cmd>")
-	}
-	if runtime.GOOS == "windows" {
-		return errors.New("ntnbox run requires Linux network namespaces; not supported on Windows")
+	// Platform gate: on macOS, proxies via Docker and returns
+	// errProxyComplete on success. On Linux, returns nil (fall through
+	// to native execution). On other platforms, returns an error.
+	if err := runPlatformGate(args); err != nil {
+		if errors.Is(err, errProxyComplete) {
+			return nil
+		}
+		return err
 	}
 
 	// Parse flags up to "--" separator.
