@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hyavari/ntn-in-a-box/internal/cli"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/apihost"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/condition"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/device"
@@ -120,7 +121,21 @@ func runRun(args []string) error {
 
 	// Subscribe a stderr logger for coverage transitions.
 	bus.SubscribeCoverage(func(ev eventbus.CoverageEvent) {
-		fmt.Fprintf(os.Stderr, "ntnbox: [%s] %s\n", ev.At.Format(time.RFC3339), ev.Kind)
+		switch ev.Kind {
+		case eventbus.KindWindowOpened:
+			// Compute remaining from the evaluator.
+			_, cov := eval.Evaluate(ev.At)
+			fmt.Fprintln(os.Stderr, cli.CoverageOpened(p.Name, cov.UntilNextTransitionSec))
+		case eventbus.KindWindowClosed:
+			_, cov := eval.Evaluate(ev.At)
+			fmt.Fprintln(os.Stderr, cli.CoverageClosed(cov.UntilNextTransitionSec))
+		case eventbus.KindWindowClosing:
+			_, cov := eval.Evaluate(ev.At)
+			fmt.Fprintln(os.Stderr, cli.CoverageClosing(cov.UntilNextTransitionSec))
+		case eventbus.KindWindowOpening:
+			_, cov := eval.Evaluate(ev.At)
+			fmt.Fprintln(os.Stderr, cli.CoverageOpening(cov.UntilNextTransitionSec))
+		}
 	})
 
 	// Optionally start the API host.

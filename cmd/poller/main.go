@@ -15,8 +15,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
+
+	"github.com/hyavari/ntn-in-a-box/internal/cli"
 )
 
 func main() {
@@ -30,8 +33,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	fmt.Fprintf(os.Stderr, "poller: polling %s every %s (timeout %s)\n", *url, *interval, *timeout)
-	fmt.Println("timestamp | status | latency | result")
+	fmt.Fprintf(os.Stderr, "%s polling %s every %s (timeout %s)\n\n",
+		cli.Styled(cli.Cyan+cli.Bold, "poller"),
+		cli.Styled(cli.White, *url),
+		*interval, *timeout)
+	fmt.Println(cli.Header())
 
 	ticker := time.NewTicker(*interval)
 	defer ticker.Stop()
@@ -42,7 +48,7 @@ func main() {
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Fprintln(os.Stderr, "\npoller: stopped")
+			fmt.Fprintf(os.Stderr, "\n%s stopped\n", cli.Styled(cli.Dim, "poller"))
 			return
 		case <-ticker.C:
 			poll(client, *url)
@@ -55,13 +61,33 @@ func poll(client *http.Client, url string) {
 	resp, err := client.Get(url) //nolint:noctx
 	elapsed := time.Since(start)
 
-	ts := start.Format(time.RFC3339)
+	ts := start.Format("15:04:05")
 
 	if err != nil {
-		fmt.Printf("%s | %3d | %8s | %s\n", ts, 0, "—", err)
+		reason := shortenError(err.Error())
+		fmt.Println(cli.RequestFail(ts, reason))
 		return
 	}
 	resp.Body.Close() //nolint:errcheck
 
-	fmt.Printf("%s | %3d | %7dms | ok\n", ts, resp.StatusCode, elapsed.Milliseconds())
+	latency := fmt.Sprintf("%dms", elapsed.Milliseconds())
+	fmt.Println(cli.RequestOK(ts, latency, resp.StatusCode))
+}
+
+// shortenError trims verbose Go HTTP error messages to something readable.
+func shortenError(msg string) string {
+	// Remove URL prefix noise.
+	if idx := strings.Index(msg, ": "); idx > 0 {
+		short := msg[idx+2:]
+		// If still long, try one more level.
+		if idx2 := strings.Index(short, ": "); idx2 > 0 && len(short) > 40 {
+			short = short[idx2+2:]
+		}
+		msg = short
+	}
+	// Truncate very long messages.
+	if len(msg) > 50 {
+		msg = msg[:47] + "..."
+	}
+	return msg
 }

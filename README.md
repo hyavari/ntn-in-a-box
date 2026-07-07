@@ -74,6 +74,17 @@ Requires Docker Desktop installed and running. Bare command names
 (`curl`, `poller`) resolve from the container's PATH; local binaries
 (prefixed with `./`) are bind-mounted into the container automatically.
 
+### Demo script
+
+A convenience script that builds everything, runs a demo, and cleans up:
+
+```bash
+./scripts/demo.sh                              # default: LEO pass + poller
+./scripts/demo.sh geo_steady                   # different profile
+./scripts/demo.sh d2c_burst curl http://example.com   # custom command
+PRUNE=1 ./scripts/demo.sh                     # also remove docker image on exit
+```
+
 ### Query the kernel API (any platform)
 
 ```bash
