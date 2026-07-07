@@ -1,8 +1,8 @@
 // Command ntnbox is the CLI entrypoint for NTN-in-a-Box.
 //
-// Step 0 scope: `ntnbox serve --profile <path>` loads a pass-shape
-// profile and starts the kernel's HTTP API host. The netns-wrapping
-// `ntnbox run` command (Dev Sandbox, Step 1) is not implemented yet.
+// Subcommands:
+//   - serve: starts the kernel API server with a given profile
+//   - run: wraps a process in a shaped network namespace (Dev Sandbox)
 package main
 
 import (
@@ -30,14 +30,16 @@ func main() {
 func run(args []string) error {
 	// Top-level: expect a subcommand.
 	if len(args) == 0 {
-		return errors.New("usage: ntnbox <command> [flags]\n\nCommands:\n  serve    Start the kernel API server")
+		return errors.New("usage: ntnbox <command> [flags]\n\nCommands:\n  serve    Start the kernel API server\n  run      Run a command under simulated NTN conditions")
 	}
 
 	switch args[0] {
 	case "serve":
 		return runServe(args[1:])
+	case "run":
+		return runRun(args[1:])
 	default:
-		return fmt.Errorf("unknown command: %s\n\nCommands:\n  serve    Start the kernel API server", args[0])
+		return fmt.Errorf("unknown command: %s\n\nCommands:\n  serve    Start the kernel API server\n  run      Run a command under simulated NTN conditions", args[0])
 	}
 }
 
