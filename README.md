@@ -62,10 +62,17 @@ re-invokes itself inside a Docker container:
 
 ```bash
 make docker
-./ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- curl http://example.com
+
+# Run curl under NTN shaping
+./ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- curl -o /dev/null -w "time_total: %{time_total}s\n" http://example.com
+
+# Run the reference poller against an external URL
+./ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- poller --url http://example.com --interval 2s
 ```
 
-Requires Docker Desktop installed and running.
+Requires Docker Desktop installed and running. Bare command names
+(`curl`, `poller`) resolve from the container's PATH; local binaries
+(prefixed with `./`) are bind-mounted into the container automatically.
 
 ### Query the kernel API (any platform)
 

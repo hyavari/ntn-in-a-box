@@ -1,6 +1,10 @@
 # Internal design/planning docs - not published to the repo
 docs/
 
+# Built binaries
+/ntnbox
+/poller
+
 # Go
 *.exe
 *.exe~
