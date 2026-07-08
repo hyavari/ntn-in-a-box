@@ -54,16 +54,11 @@ func Run(ctx context.Context, cfg Config) error {
 
 	// On exit: ensure child is killed.
 	_ = runner.Signal(syscall.SIGTERM)
-	done := make(chan struct{})
-	go func() {
-		_ = cmd.Wait()
-		close(done)
-	}()
 	select {
-	case <-done:
+	case <-runner.done:
 	case <-time.After(3 * time.Second):
 		_ = runner.Signal(os.Kill)
-		<-done
+		<-runner.done
 	}
 
 	return err
@@ -75,10 +70,12 @@ type cmdRunnerCmd struct {
 	sender Sender
 	cmd    *exec.Cmd
 	cancel context.CancelFunc
+	done   chan struct{} // closed when cmd.Wait() completes
 }
 
 func (cr *cmdRunnerCmd) Start(ctx context.Context) error {
 	ctx, cr.cancel = context.WithCancel(ctx)
+	cr.done = make(chan struct{})
 
 	pr, pw := newPipe()
 	cr.cmd.Stdout = pw
@@ -100,6 +97,7 @@ func (cr *cmdRunnerCmd) Start(ctx context.Context) error {
 		pw.Close()
 		code := cr.cmd.ProcessState.ExitCode()
 		cr.sender.Send(CmdExitedMsg{Code: code, Err: err})
+		close(cr.done)
 	}()
 
 	return nil

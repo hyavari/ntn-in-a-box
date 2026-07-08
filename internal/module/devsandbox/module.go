@@ -48,38 +48,54 @@ func (m *Module) RegisterRoutes(host module.RouteRegistrar) {
 	host.Handle("GET /sandbox/status", http.HandlerFunc(m.handleStatus))
 }
 
+// shaperTimeout is the maximum time a shaper command (tc/ip) is
+// allowed to run before being cancelled.
+const shaperTimeout = 5 * time.Second
+
 // OnCoverageEvent reacts to coverage transitions.
 //   - window_closed: set 100% loss (simulate link disappearing)
 //   - window_opened: resume curve-driven shaping with last known state
 func (m *Module) OnCoverageEvent(ev eventbus.CoverageEvent) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	switch ev.Kind {
 	case eventbus.KindWindowClosed:
 		m.inCoverage = false
-		_ = m.shaper.SetFullLoss(context.Background())
+		m.mu.Unlock()
+		ctx, cancel := context.WithTimeout(context.Background(), shaperTimeout)
+		_ = m.shaper.SetFullLoss(ctx)
+		cancel()
 		m.emitEvent("coverage_lost", ev.At)
 
 	case eventbus.KindWindowOpened:
 		m.inCoverage = true
-		if m.hasState {
-			_ = m.shaper.Apply(context.Background(), m.lastState)
+		state := m.lastState
+		hasState := m.hasState
+		m.mu.Unlock()
+		if hasState {
+			ctx, cancel := context.WithTimeout(context.Background(), shaperTimeout)
+			_ = m.shaper.Apply(ctx, state)
+			cancel()
 		}
 		m.emitEvent("coverage_gained", ev.At)
+
+	default:
+		m.mu.Unlock()
 	}
 }
 
 // OnLinkState applies updated impairment values to the shaper.
 func (m *Module) OnLinkState(ev eventbus.LinkStateEvent) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	m.lastState = ev.State
 	m.hasState = true
+	inCoverage := m.inCoverage
+	m.mu.Unlock()
 
-	if m.inCoverage {
-		_ = m.shaper.Apply(context.Background(), ev.State)
+	if inCoverage {
+		ctx, cancel := context.WithTimeout(context.Background(), shaperTimeout)
+		_ = m.shaper.Apply(ctx, ev.State)
+		cancel()
 	}
 }
 
@@ -116,10 +132,14 @@ func (m *Module) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	m.mu.Lock()
 	resp := statusResponse{InCoverage: m.inCoverage}
 	if m.hasState && m.inCoverage {
-		resp.DelayMs = &m.lastState.DelayMs
-		resp.JitterMs = &m.lastState.JitterMs
-		resp.LossPct = &m.lastState.LossPct
-		resp.BandwidthKbps = &m.lastState.BandwidthKbps
+		d := m.lastState.DelayMs
+		j := m.lastState.JitterMs
+		l := m.lastState.LossPct
+		b := m.lastState.BandwidthKbps
+		resp.DelayMs = &d
+		resp.JitterMs = &j
+		resp.LossPct = &l
+		resp.BandwidthKbps = &b
 	}
 	m.mu.Unlock()
 

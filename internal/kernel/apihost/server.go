@@ -61,6 +61,12 @@ func (s *Server) Handler() http.Handler {
 	return s.mux
 }
 
+// Handle registers a handler for a pattern on the server's mux.
+// Satisfies the module.RouteRegistrar interface.
+func (s *Server) Handle(pattern string, handler http.Handler) {
+	s.mux.Handle(pattern, handler)
+}
+
 // ListenAndServe starts the HTTP server on addr.
 func (s *Server) ListenAndServe(addr string) error {
 	srv := &http.Server{

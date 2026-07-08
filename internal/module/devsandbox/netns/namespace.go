@@ -67,7 +67,13 @@ func short(id string) string {
 // Create sets up the network namespace, veth pair, addressing, routing,
 // and NAT. Must be called before Exec or before the netem controller
 // operates on VethInner.
+//
+// If a namespace with the same name already exists (e.g. from an
+// unclean previous exit), it is destroyed first.
 func (ns *Namespace) Create(ctx context.Context) error {
+	// Clean up stale namespace from a previous unclean exit.
+	_ = ns.Exec.Run(ctx, "ip", "netns", "delete", ns.Name)
+
 	steps := []struct {
 		name string
 		args []string

@@ -130,6 +130,7 @@ func runRun(args []string) error {
 			Bus:       bus,
 			Evaluator: eval,
 		})
+		sandbox.RegisterRoutes(srv)
 		go func() {
 			fmt.Fprintf(os.Stderr, "ntnbox: API listening on %s\n", *addr)
 			fmt.Fprintf(os.Stderr, "ntnbox: GUI available at http://localhost:%s/ui\n", addrPort(*addr))

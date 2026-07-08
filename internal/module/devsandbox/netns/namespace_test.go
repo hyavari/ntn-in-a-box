@@ -57,13 +57,14 @@ func TestCreateCommandSequence(t *testing.T) {
 
 	cmds := mock.all()
 
-	// Should be exactly 10 commands.
-	if len(cmds) != 10 {
-		t.Fatalf("got %d commands, want 10:\n%s", len(cmds), strings.Join(cmds, "\n"))
+	// Should be exactly 11 commands (1 cleanup + 10 setup).
+	if len(cmds) != 11 {
+		t.Fatalf("got %d commands, want 11:\n%s", len(cmds), strings.Join(cmds, "\n"))
 	}
 
 	// Verify key commands in order.
 	wantContains := []string{
+		"ip netns delete ntnbox-ue-1",
 		"ip netns add ntnbox-ue-1",
 		"ip link add vth-ue-1-o type veth peer name vth-ue-1-i",
 		"ip link set vth-ue-1-i netns ntnbox-ue-1",
@@ -141,9 +142,9 @@ func TestCreateAndDestroy(t *testing.T) {
 	}
 
 	cmds := mock.all()
-	// 10 create + 2 destroy = 12 total.
-	if len(cmds) != 12 {
-		t.Fatalf("got %d commands, want 12", len(cmds))
+	// 1 cleanup + 10 create + 2 destroy = 13 total.
+	if len(cmds) != 13 {
+		t.Fatalf("got %d commands, want 13", len(cmds))
 	}
 
 	// Last command should be netns deletion.

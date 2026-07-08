@@ -43,7 +43,7 @@ cleanup() {
   echo ""
   echo "cleaning up..."
   # Stop any running ntnbox containers.
-  docker ps -q --filter "ancestor=ntnbox:latest" | xargs -r docker stop 2>/dev/null || true
+  docker ps -q --filter "ancestor=ntnbox:latest" | while read -r cid; do docker stop "$cid" 2>/dev/null; done || true
   rm -f ntnbox poller
   if [[ "${PRUNE:-}" == "1" ]]; then
     echo "pruning docker image..."

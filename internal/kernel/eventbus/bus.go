@@ -49,7 +49,7 @@ func (b *Bus) SubscribeCoverage(h CoverageHandler) func() {
 		defer b.mu.Unlock()
 		for i, p := range b.coverageSubs {
 			if p == ptr {
-				b.coverageSubs[i] = nil
+				b.coverageSubs = append(b.coverageSubs[:i], b.coverageSubs[i+1:]...)
 				return
 			}
 		}
@@ -68,7 +68,7 @@ func (b *Bus) SubscribeLinkState(h LinkStateHandler) func() {
 		defer b.mu.Unlock()
 		for i, p := range b.linkStateSubs {
 			if p == ptr {
-				b.linkStateSubs[i] = nil
+				b.linkStateSubs = append(b.linkStateSubs[:i], b.linkStateSubs[i+1:]...)
 				return
 			}
 		}
@@ -87,7 +87,7 @@ func (b *Bus) SubscribeObservability(h ObservabilityHandler) func() {
 		defer b.mu.Unlock()
 		for i, p := range b.observabilitySubs {
 			if p == ptr {
-				b.observabilitySubs[i] = nil
+				b.observabilitySubs = append(b.observabilitySubs[:i], b.observabilitySubs[i+1:]...)
 				return
 			}
 		}
@@ -103,9 +103,7 @@ func (b *Bus) PublishCoverageEvent(ev CoverageEvent) {
 	b.mu.Unlock()
 
 	for _, p := range subs {
-		if p != nil {
-			(*p)(ev)
-		}
+		(*p)(ev)
 	}
 }
 
@@ -144,9 +142,7 @@ func (b *Bus) PublishLinkState(state condition.LinkState, now time.Time) {
 
 	ev := LinkStateEvent{State: state, At: now}
 	for _, p := range subs {
-		if p != nil {
-			(*p)(ev)
-		}
+		(*p)(ev)
 	}
 }
 
@@ -158,9 +154,7 @@ func (b *Bus) Emit(ev ObservabilityEvent) {
 	b.mu.Unlock()
 
 	for _, p := range subs {
-		if p != nil {
-			(*p)(ev)
-		}
+		(*p)(ev)
 	}
 }
 
