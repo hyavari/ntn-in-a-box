@@ -1,5 +1,6 @@
 # Internal design/planning docs - not published to the repo
 docs/
+!docs/images/
 
 # Built binaries
 /ntnbox
@@ -23,3 +24,4 @@ vendor/
 .DS_Store
 .idea/
 .vscode/
+.superpowers/

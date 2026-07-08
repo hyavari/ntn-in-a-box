@@ -92,6 +92,8 @@ the demo script.
 
 ### TUI Dashboard
 
+<img src="docs/images/tui.png" alt="TUI Dashboard" width="800">
+
 Add `--tui` to get a live terminal dashboard instead of scrolling logs:
 
 ```bash
@@ -115,6 +117,8 @@ The TUI auto-degrades to a stacked layout on terminals narrower than
 (scrolling logs, suitable for CI/piping).
 
 ### GUI Visualization
+
+<img src="docs/images/gui.png" alt="GUI Visualization" width="800">
 
 When running with `--addr`, a web-based GUI is available that shows a
 live satellite pass animation:
