@@ -13,8 +13,8 @@ import (
 type LayoutMode int
 
 const (
-	LayoutSplit  LayoutMode = iota // metrics left, output right
-	LayoutStacked                  // compact header, output below
+	LayoutSplit   LayoutMode = iota // metrics left, output right
+	LayoutStacked                   // compact header, output below
 )
 
 // splitThreshold is the minimum terminal width for the split layout.
@@ -31,11 +31,11 @@ type Model struct {
 	expandedMode bool // Tab toggle: output takes ~90% in split mode
 
 	// Coverage state.
-	inCoverage          bool
-	coveragePercent     float64
-	remainingSec        float64
-	inLookahead         bool
-	elapsedSec          float64
+	inCoverage      bool
+	coveragePercent float64
+	remainingSec    float64
+	inLookahead     bool
+	elapsedSec      float64
 
 	// Link metrics.
 	linkState condition.LinkState
@@ -243,7 +243,6 @@ func itoa(n int) string {
 	}
 	return s
 }
-
 
 // tickCmd returns a tea.Cmd that fires a TickMsg after 1 second.
 func tickCmd() tea.Cmd {

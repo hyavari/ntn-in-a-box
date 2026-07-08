@@ -18,13 +18,13 @@ var (
 
 // Styles.
 var (
-	styleStatusGreen  = lipgloss.NewStyle().Bold(true).Foreground(colorGreen)
-	styleStatusRed    = lipgloss.NewStyle().Bold(true).Foreground(colorRed)
-	styleProgressGreen = lipgloss.NewStyle().Foreground(colorGreen)
-	styleProgressRed   = lipgloss.NewStyle().Foreground(colorRed)
+	styleStatusGreen    = lipgloss.NewStyle().Bold(true).Foreground(colorGreen)
+	styleStatusRed      = lipgloss.NewStyle().Bold(true).Foreground(colorRed)
+	styleProgressGreen  = lipgloss.NewStyle().Foreground(colorGreen)
+	styleProgressRed    = lipgloss.NewStyle().Foreground(colorRed)
 	styleProgressYellow = lipgloss.NewStyle().Foreground(colorYellow)
-	styleDim          = lipgloss.NewStyle().Foreground(colorDim)
-	styleWhite        = lipgloss.NewStyle().Foreground(colorWhite)
+	styleDim            = lipgloss.NewStyle().Foreground(colorDim)
+	styleWhite          = lipgloss.NewStyle().Foreground(colorWhite)
 )
 
 // renderLeftPanel renders the full left panel: title, coverage status,

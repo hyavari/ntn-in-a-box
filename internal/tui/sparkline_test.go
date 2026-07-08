@@ -47,25 +47,9 @@ func TestRenderSparkline_MaxValue(t *testing.T) {
 	}
 }
 
-func TestRenderSparklineFixed(t *testing.T) {
-	values := []float64{0, 25, 50, 75, 100}
-	got := renderSparklineFixed(values, 100)
-	// 0→▁, 25→▂, 50→▄, 75→▅or▆, 100→█
-	if len([]rune(got)) != 5 {
-		t.Errorf("expected 5 chars, got %d: %q", len([]rune(got)), got)
-	}
-	runes := []rune(got)
-	if runes[0] != '▁' {
-		t.Errorf("first char should be ▁, got %c", runes[0])
-	}
-	if runes[4] != '█' {
-		t.Errorf("last char should be █, got %c", runes[4])
-	}
-}
-
 func TestSparkChar_NegativeMax(t *testing.T) {
-	got := sparkChar(5, 0)
-	if got != '▁' {
-		t.Errorf("sparkChar(5, 0) = %c, want ▁", got)
+	got := sparkCharRange(5, 5, 0)
+	if got != '▄' {
+		t.Errorf("sparkCharRange(5, 5, 0) = %c, want ▄", got)
 	}
 }

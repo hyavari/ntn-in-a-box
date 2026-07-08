@@ -31,8 +31,8 @@ type Server struct {
 type Config struct {
 	Profiles  []*profile.Profile
 	Registry  *device.Registry
-	Bus       *eventbus.Bus          // optional; if nil, /events returns 503
-	Evaluator *condition.Evaluator   // optional; used by SSE to enrich coverage events
+	Bus       *eventbus.Bus        // optional; if nil, /events returns 503
+	Evaluator *condition.Evaluator // optional; used by SSE to enrich coverage events
 }
 
 // New creates a Server with the given config and returns it ready to
@@ -65,6 +65,15 @@ func (s *Server) Handler() http.Handler {
 // Satisfies the module.RouteRegistrar interface.
 func (s *Server) Handle(pattern string, handler http.Handler) {
 	s.mux.Handle(pattern, handler)
+}
+
+// RegisterEvaluator seeds a device evaluator so that
+// GET /devices/{id}/condition works for devices registered outside
+// the HTTP API (e.g. by ntnbox run).
+func (s *Server) RegisterEvaluator(deviceID string, eval *condition.Evaluator) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.evaluators[deviceID] = eval
 }
 
 // ListenAndServe starts the HTTP server on addr.

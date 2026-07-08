@@ -9,11 +9,11 @@ import (
 
 // CoverageMsg wraps a coverage event for the bubbletea update loop.
 type CoverageMsg struct {
-	Kind               eventbus.CoverageEventKind
-	InCoverage         bool
-	ElapsedSec         float64
+	Kind                eventbus.CoverageEventKind
+	InCoverage          bool
+	ElapsedSec          float64
 	UntilNextTransition float64
-	At                 time.Time
+	At                  time.Time
 }
 
 // LinkStateMsg wraps a link-state snapshot for the bubbletea update loop.

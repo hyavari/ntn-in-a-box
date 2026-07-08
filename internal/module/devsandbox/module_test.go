@@ -52,6 +52,40 @@ func (m *mockShaper) fullLossCount() int {
 	return m.fullLoss
 }
 
+// waitApply waits until Apply has been called at least n times.
+func (m *mockShaper) waitApply(t *testing.T, n int) {
+	t.Helper()
+	deadline := time.After(2 * time.Second)
+	for {
+		if m.applyCount() >= n {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("timeout waiting for Apply count >= %d (got %d)", n, m.applyCount())
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+}
+
+// waitFullLoss waits until SetFullLoss has been called at least n times.
+func (m *mockShaper) waitFullLoss(t *testing.T, n int) {
+	t.Helper()
+	deadline := time.After(2 * time.Second)
+	for {
+		if m.fullLossCount() >= n {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("timeout waiting for SetFullLoss count >= %d (got %d)", n, m.fullLossCount())
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+}
+
 func TestOnLinkStateAppliesWhileInCoverage(t *testing.T) {
 	shaper := &mockShaper{}
 	mod := New(shaper)
@@ -67,9 +101,7 @@ func TestOnLinkStateAppliesWhileInCoverage(t *testing.T) {
 	}
 	mod.OnLinkState(eventbus.LinkStateEvent{State: state, At: time.Now()})
 
-	if shaper.applyCount() != 1 {
-		t.Fatalf("Apply called %d times, want 1", shaper.applyCount())
-	}
+	shaper.waitApply(t, 1)
 	got := shaper.lastApply()
 	if got != state {
 		t.Errorf("Apply state = %+v, want %+v", got, state)
@@ -85,11 +117,15 @@ func TestOnLinkStateSkippedWhenOutOfCoverage(t *testing.T) {
 		Kind: eventbus.KindWindowClosed,
 		At:   time.Now(),
 	})
+	shaper.waitFullLoss(t, 1)
 
 	state := condition.LinkState{
 		DelayMs: 40, JitterMs: 5, LossPct: 0.2, BandwidthKbps: 20000,
 	}
 	mod.OnLinkState(eventbus.LinkStateEvent{State: state, At: time.Now()})
+
+	// Give a moment for any spurious async call.
+	time.Sleep(50 * time.Millisecond)
 
 	// Apply should NOT be called (out of coverage), but state is stored.
 	if shaper.applyCount() != 0 {
@@ -105,9 +141,7 @@ func TestCoverageClosedSetsFullLoss(t *testing.T) {
 	mod.OnCoverageEvent(eventbus.CoverageEvent{Kind: eventbus.KindWindowOpened, At: time.Now()})
 	mod.OnCoverageEvent(eventbus.CoverageEvent{Kind: eventbus.KindWindowClosed, At: time.Now()})
 
-	if shaper.fullLossCount() != 1 {
-		t.Errorf("SetFullLoss called %d times, want 1", shaper.fullLossCount())
-	}
+	shaper.waitFullLoss(t, 1)
 }
 
 func TestCoverageOpenedResumesLastState(t *testing.T) {
@@ -121,14 +155,14 @@ func TestCoverageOpenedResumesLastState(t *testing.T) {
 		DelayMs: 100, JitterMs: 10, LossPct: 5, BandwidthKbps: 2000,
 	}
 	mod.OnLinkState(eventbus.LinkStateEvent{State: state, At: time.Now()})
+	shaper.waitApply(t, 1)
 
 	mod.OnCoverageEvent(eventbus.CoverageEvent{Kind: eventbus.KindWindowClosed, At: time.Now()})
-	mod.OnCoverageEvent(eventbus.CoverageEvent{Kind: eventbus.KindWindowOpened, At: time.Now()})
+	shaper.waitFullLoss(t, 1)
 
-	// Apply should have been called: once from OnLinkState, once from reopening.
-	if shaper.applyCount() != 2 {
-		t.Fatalf("Apply called %d times, want 2", shaper.applyCount())
-	}
+	mod.OnCoverageEvent(eventbus.CoverageEvent{Kind: eventbus.KindWindowOpened, At: time.Now()})
+	shaper.waitApply(t, 2)
+
 	got := shaper.lastApply()
 	if got != state {
 		t.Errorf("on reopen, Apply state = %+v, want %+v", got, state)
@@ -176,6 +210,7 @@ func TestStatusEndpointInCoverage(t *testing.T) {
 		State: condition.LinkState{DelayMs: 40, JitterMs: 5, LossPct: 0.2, BandwidthKbps: 20000},
 		At:    time.Now(),
 	})
+	shaper.waitApply(t, 1)
 
 	req := httptest.NewRequest("GET", "/sandbox/status", nil)
 	w := httptest.NewRecorder()
@@ -207,6 +242,7 @@ func TestStatusEndpointOutOfCoverage(t *testing.T) {
 
 	// Start out of coverage.
 	mod.OnCoverageEvent(eventbus.CoverageEvent{Kind: eventbus.KindWindowClosed, At: time.Now()})
+	shaper.waitFullLoss(t, 1)
 
 	req := httptest.NewRequest("GET", "/sandbox/status", nil)
 	w := httptest.NewRecorder()

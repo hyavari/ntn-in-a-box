@@ -205,7 +205,6 @@ func TestPublishLinkState_ConcurrentPublishAndSubscribeIsRaceFree(t *testing.T) 
 	}
 }
 
-
 func TestUnsubscribeCoverage(t *testing.T) {
 	b := New(DefaultLinkStateThrottle)
 	var count int

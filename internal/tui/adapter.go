@@ -33,10 +33,10 @@ func (a *Adapter) OnCoverage(ev eventbus.CoverageEvent) {
 	_, cov := a.eval.Evaluate(ev.At)
 	a.sender.Send(CoverageMsg{
 		Kind:                ev.Kind,
-		InCoverage:         cov.InCoverage,
-		ElapsedSec:         cov.ElapsedSec,
+		InCoverage:          cov.InCoverage,
+		ElapsedSec:          cov.ElapsedSec,
 		UntilNextTransition: cov.UntilNextTransitionSec,
-		At:                 ev.At,
+		At:                  ev.At,
 	})
 }
 

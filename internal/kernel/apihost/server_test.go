@@ -350,7 +350,6 @@ func TestGetConditionDeviceNotFound(t *testing.T) {
 	}
 }
 
-
 func TestSSE_NoBus_Returns503(t *testing.T) {
 	srv := New(Config{
 		Profiles: []*profile.Profile{},
@@ -418,7 +417,6 @@ func TestSSE_StreamsEvents(t *testing.T) {
 		t.Errorf("expected delay_ms:42 in body, got:\n%s", body)
 	}
 }
-
 
 func TestUI_ServesIndexHTML(t *testing.T) {
 	srv := New(Config{

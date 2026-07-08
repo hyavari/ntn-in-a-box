@@ -130,6 +130,7 @@ func runRun(args []string) error {
 			Bus:       bus,
 			Evaluator: eval,
 		})
+		srv.RegisterEvaluator(dev.ID, eval)
 		sandbox.RegisterRoutes(srv)
 		go func() {
 			fmt.Fprintf(os.Stderr, "ntnbox: API listening on %s\n", *addr)
@@ -222,7 +223,6 @@ func runRun(args []string) error {
 		return nil
 	}
 }
-
 
 // addrPort extracts the port from an address like ":8080" or "0.0.0.0:8080".
 func addrPort(addr string) string {

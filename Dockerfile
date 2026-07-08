@@ -9,7 +9,7 @@ RUN go mod download
 COPY . .
 
 RUN CGO_ENABLED=0 go build -o /out/ntnbox ./cmd/ntnbox/
-RUN CGO_ENABLED=0 go build -o /out/poller ./cmd/poller/ 2>/dev/null || true
+RUN CGO_ENABLED=0 go build -o /out/poller ./cmd/poller/
 
 # Runtime image.
 FROM alpine:3.20

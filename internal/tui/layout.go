@@ -94,8 +94,8 @@ func (m Model) renderStacked() string {
 // output viewport based on the current layout.
 func (m Model) viewportDimensions() (width, height int) {
 	if m.layoutMode == LayoutStacked || m.expandedMode {
-		// Stacked: 2 header lines + 1 separator.
-		return m.width, max(1, m.height-3)
+		// Stacked: 1 header line + 1 separator = 2 chrome lines.
+		return m.width, max(1, m.height-2)
 	}
 	// Split: right panel is 60% width, full height minus header line.
 	rightWidth := m.width - m.width*40/100 - 1

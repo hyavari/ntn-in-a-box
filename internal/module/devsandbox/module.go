@@ -19,38 +19,75 @@ type Shaper interface {
 	SetFullLoss(ctx context.Context) error
 }
 
+// shaperTimeout is the maximum time a shaper command (tc/ip) is
+// allowed to run before being cancelled.
+const shaperTimeout = 5 * time.Second
+
+// shaperCmd represents a command to send to the shaper goroutine.
+type shaperCmd struct {
+	fullLoss bool
+	state    condition.LinkState
+	gen      uint64 // generation: stale commands are dropped
+}
+
 // Module is the Dev Sandbox capability module. It receives coverage
 // and link-state events from the kernel's event bus and drives a
 // Shaper (netem controller) to shape traffic accordingly.
 //
 // Safe for concurrent use — OnCoverageEvent and OnLinkState may be
 // called from different goroutines per the module contract.
+//
+// Shaper commands are serialized through a channel to prevent
+// interleaving (e.g. a late Apply undoing a SetFullLoss).
 type Module struct {
 	shaper  Shaper
-	emitter module.Emitter
+	shapeCh chan shaperCmd
 
 	mu         sync.Mutex
+	emitter    module.Emitter
 	lastState  condition.LinkState
 	hasState   bool
 	inCoverage bool
+	gen        uint64 // incremented on coverage transitions
 }
 
 // Compile-time check that Module satisfies pkg/module.Module.
 var _ module.Module = (*Module)(nil)
 
 // New creates a Dev Sandbox module that drives the given shaper.
+// A background goroutine processes shaper commands sequentially.
 func New(shaper Shaper) *Module {
-	return &Module{shaper: shaper}
+	m := &Module{
+		shaper:  shaper,
+		shapeCh: make(chan shaperCmd, 16),
+	}
+	go m.shaperLoop()
+	return m
+}
+
+// shaperLoop processes shaper commands sequentially. Stale commands
+// (generation < current) are dropped to prevent interleaving.
+func (m *Module) shaperLoop() {
+	var currentGen uint64
+	for cmd := range m.shapeCh {
+		if cmd.gen < currentGen {
+			continue // stale command, skip
+		}
+		currentGen = cmd.gen
+		ctx, cancel := context.WithTimeout(context.Background(), shaperTimeout)
+		if cmd.fullLoss {
+			_ = m.shaper.SetFullLoss(ctx)
+		} else {
+			_ = m.shaper.Apply(ctx, cmd.state)
+		}
+		cancel()
+	}
 }
 
 // RegisterRoutes adds the sandbox's HTTP endpoints to the API host.
 func (m *Module) RegisterRoutes(host module.RouteRegistrar) {
 	host.Handle("GET /sandbox/status", http.HandlerFunc(m.handleStatus))
 }
-
-// shaperTimeout is the maximum time a shaper command (tc/ip) is
-// allowed to run before being cancelled.
-const shaperTimeout = 5 * time.Second
 
 // OnCoverageEvent reacts to coverage transitions.
 //   - window_closed: set 100% loss (simulate link disappearing)
@@ -61,23 +98,39 @@ func (m *Module) OnCoverageEvent(ev eventbus.CoverageEvent) {
 	switch ev.Kind {
 	case eventbus.KindWindowClosed:
 		m.inCoverage = false
+		m.gen++
+		gen := m.gen
+		emitter := m.emitter
 		m.mu.Unlock()
-		ctx, cancel := context.WithTimeout(context.Background(), shaperTimeout)
-		_ = m.shaper.SetFullLoss(ctx)
-		cancel()
-		m.emitEvent("coverage_lost", ev.At)
+
+		m.shapeCh <- shaperCmd{fullLoss: true, gen: gen}
+		if emitter != nil {
+			emitter.Emit(eventbus.ObservabilityEvent{
+				Name:   "devsandbox.coverage_lost",
+				Fields: map[string]any{"at": ev.At.Format(time.RFC3339)},
+				At:     ev.At,
+			})
+		}
 
 	case eventbus.KindWindowOpened:
 		m.inCoverage = true
+		m.gen++
+		gen := m.gen
 		state := m.lastState
 		hasState := m.hasState
+		emitter := m.emitter
 		m.mu.Unlock()
+
 		if hasState {
-			ctx, cancel := context.WithTimeout(context.Background(), shaperTimeout)
-			_ = m.shaper.Apply(ctx, state)
-			cancel()
+			m.shapeCh <- shaperCmd{state: state, gen: gen}
 		}
-		m.emitEvent("coverage_gained", ev.At)
+		if emitter != nil {
+			emitter.Emit(eventbus.ObservabilityEvent{
+				Name:   "devsandbox.coverage_gained",
+				Fields: map[string]any{"at": ev.At.Format(time.RFC3339)},
+				At:     ev.At,
+			})
+		}
 
 	default:
 		m.mu.Unlock()
@@ -90,12 +143,11 @@ func (m *Module) OnLinkState(ev eventbus.LinkStateEvent) {
 	m.lastState = ev.State
 	m.hasState = true
 	inCoverage := m.inCoverage
+	gen := m.gen
 	m.mu.Unlock()
 
 	if inCoverage {
-		ctx, cancel := context.WithTimeout(context.Background(), shaperTimeout)
-		_ = m.shaper.Apply(ctx, ev.State)
-		cancel()
+		m.shapeCh <- shaperCmd{state: ev.State, gen: gen}
 	}
 }
 
@@ -107,17 +159,6 @@ func (m *Module) Emit(emitter module.Emitter) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.emitter = emitter
-}
-
-func (m *Module) emitEvent(name string, at time.Time) {
-	if m.emitter == nil {
-		return
-	}
-	m.emitter.Emit(eventbus.ObservabilityEvent{
-		Name:   "devsandbox." + name,
-		Fields: map[string]any{"at": at.Format(time.RFC3339)},
-		At:     at,
-	})
 }
 
 type statusResponse struct {
