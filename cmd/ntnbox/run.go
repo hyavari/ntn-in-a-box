@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/hyavari/ntn-in-a-box/internal/module/devsandbox"
 	"github.com/hyavari/ntn-in-a-box/internal/module/devsandbox/netem"
 	"github.com/hyavari/ntn-in-a-box/internal/module/devsandbox/netns"
+	ntntui "github.com/hyavari/ntn-in-a-box/internal/tui"
 )
 
 // errProxyComplete signals that the Docker proxy ran the command
@@ -41,6 +43,7 @@ func runRun(args []string) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	profilePath := fs.String("profile", "", "Path to a YAML profile file (required)")
 	addr := fs.String("addr", "", "Optionally expose the API host (host:port)")
+	tuiFlag := fs.Bool("tui", false, "Show a live TUI dashboard instead of scrolling output")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -119,25 +122,6 @@ func runRun(args []string) error {
 	bus.SubscribeCoverage(sandbox.OnCoverageEvent)
 	bus.SubscribeLinkState(sandbox.OnLinkState)
 
-	// Subscribe a stderr logger for coverage transitions.
-	bus.SubscribeCoverage(func(ev eventbus.CoverageEvent) {
-		switch ev.Kind {
-		case eventbus.KindWindowOpened:
-			// Compute remaining from the evaluator.
-			_, cov := eval.Evaluate(ev.At)
-			fmt.Fprintln(os.Stderr, cli.CoverageOpened(p.Name, cov.UntilNextTransitionSec))
-		case eventbus.KindWindowClosed:
-			_, cov := eval.Evaluate(ev.At)
-			fmt.Fprintln(os.Stderr, cli.CoverageClosed(cov.UntilNextTransitionSec))
-		case eventbus.KindWindowClosing:
-			_, cov := eval.Evaluate(ev.At)
-			fmt.Fprintln(os.Stderr, cli.CoverageClosing(cov.UntilNextTransitionSec))
-		case eventbus.KindWindowOpening:
-			_, cov := eval.Evaluate(ev.At)
-			fmt.Fprintln(os.Stderr, cli.CoverageOpening(cov.UntilNextTransitionSec))
-		}
-	})
-
 	// Optionally start the API host.
 	if *addr != "" {
 		srv := apihost.New(apihost.Config{
@@ -160,6 +144,38 @@ func runRun(args []string) error {
 	loopCtx, loopCancel := context.WithCancel(ctx)
 	defer loopCancel()
 	go loop.Run(loopCtx)
+
+	// TUI mode: the TUI owns the terminal and manages the child process.
+	if *tuiFlag {
+		return ntntui.Run(ctx, ntntui.Config{
+			Bus:       bus,
+			Evaluator: eval,
+			Profile:   p,
+			CmdFn: func() *exec.Cmd {
+				return ns.Command(cmdArgs[0], cmdArgs[1:]...)
+			},
+		})
+	}
+
+	// Non-TUI mode: scrolling output (existing behavior).
+
+	// Subscribe a stderr logger for coverage transitions.
+	bus.SubscribeCoverage(func(ev eventbus.CoverageEvent) {
+		switch ev.Kind {
+		case eventbus.KindWindowOpened:
+			_, cov := eval.Evaluate(ev.At)
+			fmt.Fprintln(os.Stderr, cli.CoverageOpened(p.Name, cov.UntilNextTransitionSec))
+		case eventbus.KindWindowClosed:
+			_, cov := eval.Evaluate(ev.At)
+			fmt.Fprintln(os.Stderr, cli.CoverageClosed(cov.UntilNextTransitionSec))
+		case eventbus.KindWindowClosing:
+			_, cov := eval.Evaluate(ev.At)
+			fmt.Fprintln(os.Stderr, cli.CoverageClosing(cov.UntilNextTransitionSec))
+		case eventbus.KindWindowOpening:
+			_, cov := eval.Evaluate(ev.At)
+			fmt.Fprintln(os.Stderr, cli.CoverageOpening(cov.UntilNextTransitionSec))
+		}
+	})
 
 	// Launch user command inside the namespace.
 	fmt.Fprintf(os.Stderr, "ntnbox: running %v (profile: %s)\n", cmdArgs, p.Name)

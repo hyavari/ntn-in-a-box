@@ -3,7 +3,9 @@
 #
 # Usage:
 #   ./scripts/demo.sh                          # default: LEO pass + poller
+#   ./scripts/demo.sh --tui                    # with TUI dashboard
 #   ./scripts/demo.sh geo_steady               # use a different profile
+#   ./scripts/demo.sh --tui leo_pass_90s       # TUI + specific profile
 #   ./scripts/demo.sh leo_pass_90s curl http://example.com   # custom command
 #
 # Options:
@@ -12,6 +14,13 @@
 # Ctrl+C to stop. Binaries are cleaned up on exit.
 
 set -euo pipefail
+
+# Check for --tui flag.
+TUI_FLAG=""
+if [[ "${1:-}" == "--tui" ]]; then
+  TUI_FLAG="--tui"
+  shift
+fi
 
 PROFILE="${1:-leo_pass_90s}"
 shift 2>/dev/null || true
@@ -51,7 +60,7 @@ go build -o poller ./cmd/poller/
 echo "==> building docker image..."
 docker build -t ntnbox:latest . -q
 
-echo "==> running: ntnbox run --profile $PROFILE_PATH -- ${CMD[*]}"
+echo "==> running: ntnbox run ${TUI_FLAG} --profile $PROFILE_PATH -- ${CMD[*]}"
 echo ""
 
-./ntnbox run --profile "$PROFILE_PATH" -- "${CMD[@]}"
+./ntnbox run ${TUI_FLAG} --profile "$PROFILE_PATH" -- "${CMD[@]}"

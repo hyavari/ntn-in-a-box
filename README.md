@@ -80,10 +80,36 @@ A convenience script that builds everything, runs a demo, and cleans up:
 
 ```bash
 ./scripts/demo.sh                              # default: LEO pass + poller
+./scripts/demo.sh --tui                        # with live TUI dashboard
 ./scripts/demo.sh geo_steady                   # different profile
+./scripts/demo.sh --tui geo_steady             # TUI + specific profile
 ./scripts/demo.sh d2c_burst curl http://example.com   # custom command
 PRUNE=1 ./scripts/demo.sh                     # also remove docker image on exit
 ```
+
+### TUI Dashboard
+
+Add `--tui` to get a live terminal dashboard instead of scrolling logs:
+
+```bash
+sudo ./ntnbox run --tui --profile testdata/profiles/leo_pass_90s.yaml -- ./poller
+```
+
+The dashboard shows:
+- **Left panel:** coverage status (▲/▼), colored progress bar, link
+  metrics with sparklines, profile info
+- **Right panel:** scrollable output from the wrapped command, with
+  coverage transition markers injected inline
+
+Keyboard controls:
+- `q` / `Ctrl+C` — quit
+- `↑`/`↓`/`PgUp`/`PgDn` — scroll output
+- `f` — toggle follow mode (auto-scroll)
+- `Tab` — toggle expanded output view
+
+The TUI auto-degrades to a stacked layout on terminals narrower than
+100 columns. Without `--tui`, output behaves exactly as before
+(scrolling logs, suitable for CI/piping).
 
 ### Query the kernel API (any platform)
 

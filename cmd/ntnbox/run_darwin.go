@@ -15,9 +15,6 @@ import (
 // runPlatformGate on macOS re-invokes ntnbox run inside a Docker
 // container. Returns nil only if it should fall through to native
 // execution (never on macOS — it either proxies or errors).
-// The returned error is always non-nil: either the proxy ran
-// successfully (returning the container's exit status as an error) or
-// it failed to start.
 func runPlatformGate(originalArgs []string) error {
 	return runViaDarwinDocker(originalArgs)
 }
@@ -31,14 +28,14 @@ func runViaDarwinDocker(args []string) error {
 			"Install Docker Desktop: https://www.docker.com/products/docker-desktop/")
 	}
 
-	// Parse the args to find --profile and the command after --.
-	profilePath, cmdArgs, err := parseDarwinArgs(args)
+	// Parse the args to find --profile, --tui, --addr, and the command after --.
+	parsed, err := parseDarwinArgs(args)
 	if err != nil {
 		return err
 	}
 
 	// Resolve profile to absolute path for bind-mounting.
-	absProfile, err := filepath.Abs(profilePath)
+	absProfile, err := filepath.Abs(parsed.profilePath)
 	if err != nil {
 		return fmt.Errorf("resolving profile path: %w", err)
 	}
@@ -51,13 +48,14 @@ func runViaDarwinDocker(args []string) error {
 		"-v", absProfile + ":/tmp/profile.yaml:ro",
 	}
 
-	// Only attach TTY if stdin is a terminal.
+	// Only attach TTY if stdin is a terminal (required for --tui).
 	if fileInfo, _ := os.Stdin.Stat(); fileInfo.Mode()&os.ModeCharDevice != 0 {
 		dockerArgs = append(dockerArgs, "-it")
 	}
 
 	// If the command is a local file (starts with ./ or /), bind-mount it.
 	// Otherwise let it resolve from the container's PATH.
+	cmdArgs := parsed.cmdArgs
 	if len(cmdArgs) > 0 {
 		cmdBin := cmdArgs[0]
 		if len(cmdBin) > 0 && (cmdBin[0] == '/' || (len(cmdBin) > 1 && cmdBin[:2] == "./")) {
@@ -72,11 +70,19 @@ func runViaDarwinDocker(args []string) error {
 		}
 	}
 
-	// Image + ntnbox run command inside the container.
-	dockerArgs = append(dockerArgs, "ntnbox:latest",
-		"run", "--profile", "/tmp/profile.yaml", "--",
-	)
-	dockerArgs = append(dockerArgs, cmdArgs...)
+	// Build the ntnbox run command for inside the container.
+	containerCmd := []string{"run", "--profile", "/tmp/profile.yaml"}
+	if parsed.tui {
+		containerCmd = append(containerCmd, "--tui")
+	}
+	if parsed.addr != "" {
+		containerCmd = append(containerCmd, "--addr", parsed.addr)
+	}
+	containerCmd = append(containerCmd, "--")
+	containerCmd = append(containerCmd, cmdArgs...)
+
+	dockerArgs = append(dockerArgs, "ntnbox:latest")
+	dockerArgs = append(dockerArgs, containerCmd...)
 
 	fmt.Fprintf(os.Stderr, "ntnbox: detected macOS, running via Docker...\n")
 	fmt.Fprintf(os.Stderr, "ntnbox: %s %v\n", dockerPath, dockerArgs)
@@ -108,30 +114,46 @@ func runViaDarwinDocker(args []string) error {
 	return errProxyComplete
 }
 
-// parseDarwinArgs extracts --profile value and the command after "--"
-// from the original args slice without modifying them.
-func parseDarwinArgs(args []string) (profilePath string, cmdArgs []string, err error) {
+// darwinParsed holds the parsed flags from the run command args.
+type darwinParsed struct {
+	profilePath string
+	tui         bool
+	addr        string
+	cmdArgs     []string
+}
+
+// parseDarwinArgs extracts --profile, --tui, --addr values and the
+// command after "--" from the original args slice.
+func parseDarwinArgs(args []string) (darwinParsed, error) {
+	var p darwinParsed
 	for i := 0; i < len(args); i++ {
 		switch {
 		case args[i] == "--profile" && i+1 < len(args):
-			profilePath = args[i+1]
+			p.profilePath = args[i+1]
 			i++
-		case len(args[i]) > len("--profile=") && args[i][:10] == "--profile=":
-			profilePath = args[i][10:]
+		case len(args[i]) > 10 && args[i][:10] == "--profile=":
+			p.profilePath = args[i][10:]
+		case args[i] == "--tui":
+			p.tui = true
+		case args[i] == "--addr" && i+1 < len(args):
+			p.addr = args[i+1]
+			i++
+		case len(args[i]) > 7 && args[i][:7] == "--addr=":
+			p.addr = args[i][7:]
 		case args[i] == "--":
-			cmdArgs = args[i+1:]
-			if profilePath == "" {
-				return "", nil, errors.New("--profile is required")
+			p.cmdArgs = args[i+1:]
+			if p.profilePath == "" {
+				return p, errors.New("--profile is required")
 			}
-			if len(cmdArgs) == 0 {
-				return "", nil, errors.New("no command specified after --")
+			if len(p.cmdArgs) == 0 {
+				return p, errors.New("no command specified after --")
 			}
-			return profilePath, cmdArgs, nil
+			return p, nil
 		}
 	}
 
-	if profilePath == "" {
-		return "", nil, errors.New("--profile is required\n\nUsage: ntnbox run --profile <path> [--addr <host:port>] -- <cmd> [args...]")
+	if p.profilePath == "" {
+		return p, errors.New("--profile is required\n\nUsage: ntnbox run --profile <path> [--addr <host:port>] [--tui] -- <cmd> [args...]")
 	}
-	return "", nil, errors.New("no command specified after --\n\nUsage: ntnbox run --profile <path> [--addr <host:port>] -- <cmd> [args...]")
+	return p, errors.New("no command specified after --\n\nUsage: ntnbox run --profile <path> [--addr <host:port>] [--tui] -- <cmd> [args...]")
 }
