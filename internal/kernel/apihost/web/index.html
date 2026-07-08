@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NTN-in-a-Box</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="title-bar">
+        <span class="title-name">NTN-in-a-Box</span>
+        <span class="title-sub">Satellite Pass Visualization</span>
+        <a class="title-github" href="https://github.com/hyavari/ntn-in-a-box" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <div class="container">
+        <!-- Left: Animation Panel -->
+        <div class="animation-panel" id="animationPanel">
+            <!-- Sky background -->
+            <div class="sky" id="sky">
+                <!-- Stars -->
+                <div class="star" style="top:8%;left:12%"></div>
+                <div class="star" style="top:15%;left:55%"></div>
+                <div class="star" style="top:5%;right:20%"></div>
+                <div class="star" style="top:22%;left:35%"></div>
+                <div class="star" style="top:10%;right:40%"></div>
+
+                <!-- Orbit arc -->
+                <div class="orbit-arc"></div>
+
+                <!-- Satellite -->
+                <div class="satellite" id="satellite">&#x1F6F0;&#xFE0F;</div>
+
+                <!-- Beam / Coverage cone -->
+                <div class="beam" id="beam"></div>
+
+                <!-- Ground -->
+                <div class="ground"></div>
+
+                <!-- Device (UE) -->
+                <div class="device" id="device">
+                    <div class="device-body">
+                        <div class="device-screen"></div>
+                    </div>
+                    <div class="device-label">UE</div>
+                </div>
+
+                <!-- Status overlay -->
+                <div class="orbit-label">LEO · 550km</div>
+                <div class="link-status" id="linkStatus">● LINKED</div>
+            </div>
+
+            <!-- Progress bar at bottom of animation -->
+            <div class="anim-progress">
+                <div class="anim-progress-fill" id="animProgress"></div>
+            </div>
+        </div>
+
+        <!-- Right: Metrics Panel -->
+        <div class="metrics-panel">
+            <!-- Header -->
+            <div class="status-header">
+                <div class="status-left">
+                    <span class="coverage-indicator" id="coverageIndicator">▲ IN COVERAGE</span>
+                    <span class="profile-name" id="profileName">—</span>
+                </div>
+                <span class="countdown" id="countdown">—</span>
+            </div>
+
+            <!-- Metrics Grid -->
+            <div class="metrics-grid">
+                <div class="metric-card metric-delay">
+                    <div class="metric-label">DELAY</div>
+                    <div class="metric-value" id="metricDelay">—</div>
+                    <svg class="sparkline" id="sparkDelay" viewBox="0 0 100 30" preserveAspectRatio="none"></svg>
+                </div>
+                <div class="metric-card metric-jitter">
+                    <div class="metric-label">JITTER</div>
+                    <div class="metric-value" id="metricJitter">—</div>
+                    <svg class="sparkline" id="sparkJitter" viewBox="0 0 100 30" preserveAspectRatio="none"></svg>
+                </div>
+                <div class="metric-card metric-loss">
+                    <div class="metric-label">LOSS</div>
+                    <div class="metric-value" id="metricLoss">—</div>
+                    <svg class="sparkline" id="sparkLoss" viewBox="0 0 100 30" preserveAspectRatio="none"></svg>
+                </div>
+                <div class="metric-card metric-bw">
+                    <div class="metric-label">BANDWIDTH</div>
+                    <div class="metric-value" id="metricBw">—</div>
+                    <svg class="sparkline" id="sparkBw" viewBox="0 0 100 30" preserveAspectRatio="none"></svg>
+                </div>
+            </div>
+
+            <!-- Timeline -->
+            <div class="timeline-container">
+                <div class="timeline-header">
+                    <span class="timeline-label">COVERAGE TIMELINE</span>
+                    <span class="timeline-period" id="timelinePeriod">—</span>
+                </div>
+                <div class="timeline-bar" id="timelineBar"></div>
+                <div class="timeline-labels">
+                    <span id="timelineLeft">—</span>
+                    <span>now</span>
+                    <span id="timelineRight">—</span>
+                </div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="progress-container">
+                <div class="progress-header">
+                    <span class="progress-label">WINDOW PROGRESS</span>
+                    <span class="progress-info" id="progressInfo">—</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+            </div>
+
+            <!-- Profile Info -->
+            <div class="profile-container">
+                <div class="profile-row"><span class="profile-key">profile:</span> <span id="profileDetail">—</span></div>
+                <div class="profile-row"><span class="profile-key">mode:</span> <span id="profileMode">—</span></div>
+                <div class="profile-row"><span class="profile-key">schedule:</span> <span id="profileSchedule">—</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Connection status -->
+    <div class="connection-badge" id="connectionBadge">connecting...</div>
+
+    <!-- Idle overlay (no events received) -->
+    <div class="idle-overlay" id="idleOverlay">
+        <div class="idle-text">waiting for session...</div>
+        <div class="idle-hint">start <code>ntnbox run --addr :8080 --profile ... -- cmd</code></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

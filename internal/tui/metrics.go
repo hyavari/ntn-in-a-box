@@ -27,11 +27,13 @@ var (
 	styleWhite        = lipgloss.NewStyle().Foreground(colorWhite)
 )
 
-// renderLeftPanel renders the full left panel: coverage status,
+// renderLeftPanel renders the full left panel: title, coverage status,
 // progress bar, metrics, profile info, and help.
 func (m Model) renderLeftPanel(width int) string {
 	var sections []string
 
+	sections = append(sections, styleStatusGreen.Render(" NTN-in-a-Box"))
+	sections = append(sections, "") // blank separator
 	sections = append(sections, m.renderCoverageStatus(width))
 	sections = append(sections, m.renderProgressBar(width))
 	sections = append(sections, "") // blank separator
@@ -165,9 +167,23 @@ func (m Model) renderProfileInfo() string {
 	}, "\n")
 }
 
-// renderHelpLine renders the keyboard shortcut hints.
+// renderHelpLine renders the keyboard shortcut hints and GUI URL.
 func (m Model) renderHelpLine() string {
-	return styleDim.Render(" [q]uit [f]ollow [Tab]expand [↑↓]scroll")
+	help := styleDim.Render(" [q]uit [f]ollow [Tab]expand [↑↓]scroll")
+	if m.addr != "" {
+		help += "\n" + styleDim.Render(" GUI: http://localhost:"+addrPort(m.addr)+"/ui")
+	}
+	return help
+}
+
+// addrPort extracts the port from an address like ":8080" or "0.0.0.0:8080".
+func addrPort(addr string) string {
+	for i := len(addr) - 1; i >= 0; i-- {
+		if addr[i] == ':' {
+			return addr[i+1:]
+		}
+	}
+	return addr
 }
 
 // renderStackedHeader renders the compact 1-line header for the

@@ -59,6 +59,9 @@ type Model struct {
 	cmdExited bool
 	exitCode  int
 
+	// API address (for displaying GUI URL).
+	addr string
+
 	// Ready indicates that the first WindowSizeMsg has been received
 	// and the viewport is initialized.
 	ready bool

@@ -125,11 +125,14 @@ func runRun(args []string) error {
 	// Optionally start the API host.
 	if *addr != "" {
 		srv := apihost.New(apihost.Config{
-			Profiles: []*profile.Profile{p},
-			Registry: registry,
+			Profiles:  []*profile.Profile{p},
+			Registry:  registry,
+			Bus:       bus,
+			Evaluator: eval,
 		})
 		go func() {
 			fmt.Fprintf(os.Stderr, "ntnbox: API listening on %s\n", *addr)
+			fmt.Fprintf(os.Stderr, "ntnbox: GUI available at http://localhost:%s/ui\n", addrPort(*addr))
 			_ = srv.ListenAndServe(*addr)
 		}()
 	}
@@ -151,6 +154,7 @@ func runRun(args []string) error {
 			Bus:       bus,
 			Evaluator: eval,
 			Profile:   p,
+			Addr:      *addr,
 			CmdFn: func() *exec.Cmd {
 				return ns.Command(cmdArgs[0], cmdArgs[1:]...)
 			},
@@ -216,4 +220,15 @@ func runRun(args []string) error {
 		}
 		return nil
 	}
+}
+
+
+// addrPort extracts the port from an address like ":8080" or "0.0.0.0:8080".
+func addrPort(addr string) string {
+	for i := len(addr) - 1; i >= 0; i-- {
+		if addr[i] == ':' {
+			return addr[i+1:]
+		}
+	}
+	return addr
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/condition"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/device"
+	"github.com/hyavari/ntn-in-a-box/internal/kernel/eventbus"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/profile"
 )
 
@@ -18,6 +19,8 @@ type Server struct {
 	mux      *http.ServeMux
 	profiles map[string]*profile.Profile
 	registry *device.Registry
+	bus      *eventbus.Bus
+	eval     *condition.Evaluator
 
 	// Per-device evaluators, created at device registration time.
 	mu         sync.RWMutex
@@ -26,8 +29,10 @@ type Server struct {
 
 // Config holds what the server needs to start.
 type Config struct {
-	Profiles []*profile.Profile
-	Registry *device.Registry
+	Profiles  []*profile.Profile
+	Registry  *device.Registry
+	Bus       *eventbus.Bus          // optional; if nil, /events returns 503
+	Evaluator *condition.Evaluator   // optional; used by SSE to enrich coverage events
 }
 
 // New creates a Server with the given config and returns it ready to
@@ -43,6 +48,8 @@ func New(cfg Config) *Server {
 		mux:        http.NewServeMux(),
 		profiles:   profiles,
 		registry:   cfg.Registry,
+		bus:        cfg.Bus,
+		eval:       cfg.Evaluator,
 		evaluators: make(map[string]*condition.Evaluator),
 	}
 	s.registerRoutes()
@@ -73,6 +80,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /devices", s.handleListDevices)
 	s.mux.HandleFunc("GET /devices/{id}", s.handleGetDevice)
 	s.mux.HandleFunc("GET /devices/{id}/condition", s.handleGetCondition)
+	s.mux.HandleFunc("GET /events", s.handleSSE)
+	s.registerUI()
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {

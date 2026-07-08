@@ -48,6 +48,21 @@ func runViaDarwinDocker(args []string) error {
 		"-v", absProfile + ":/tmp/profile.yaml:ro",
 	}
 
+	// Publish the API port if --addr is set.
+	if parsed.addr != "" {
+		// Extract port from addr (":8080" or "host:port").
+		port := parsed.addr
+		if idx := len(port) - 1; idx >= 0 {
+			for i := len(port) - 1; i >= 0; i-- {
+				if port[i] == ':' {
+					port = port[i+1:]
+					break
+				}
+			}
+		}
+		dockerArgs = append(dockerArgs, "-p", port+":"+port)
+	}
+
 	// Only attach TTY if stdin is a terminal (required for --tui).
 	if fileInfo, _ := os.Stdin.Stat(); fileInfo.Mode()&os.ModeCharDevice != 0 {
 		dockerArgs = append(dockerArgs, "-it")
@@ -76,7 +91,15 @@ func runViaDarwinDocker(args []string) error {
 		containerCmd = append(containerCmd, "--tui")
 	}
 	if parsed.addr != "" {
-		containerCmd = append(containerCmd, "--addr", parsed.addr)
+		// Inside the container, bind 0.0.0.0 so Docker port forwarding works.
+		port := parsed.addr
+		for i := len(port) - 1; i >= 0; i-- {
+			if port[i] == ':' {
+				port = port[i+1:]
+				break
+			}
+		}
+		containerCmd = append(containerCmd, "--addr", "0.0.0.0:"+port)
 	}
 	containerCmd = append(containerCmd, "--")
 	containerCmd = append(containerCmd, cmdArgs...)

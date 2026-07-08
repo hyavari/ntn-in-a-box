@@ -22,9 +22,9 @@ import (
 type Bus struct {
 	mu sync.Mutex
 
-	coverageSubs      []CoverageHandler
-	linkStateSubs     []LinkStateHandler
-	observabilitySubs []ObservabilityHandler
+	coverageSubs      []*CoverageHandler
+	linkStateSubs     []*LinkStateHandler
+	observabilitySubs []*ObservabilityHandler
 
 	throttle     LinkStateThrottle
 	lastLinkAt   time.Time
@@ -38,37 +38,74 @@ func New(throttle LinkStateThrottle) *Bus {
 }
 
 // SubscribeCoverage registers h to be called for every CoverageEvent.
-func (b *Bus) SubscribeCoverage(h CoverageHandler) {
+// Returns an unsubscribe function that removes the handler.
+func (b *Bus) SubscribeCoverage(h CoverageHandler) func() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.coverageSubs = append(b.coverageSubs, h)
+	ptr := &h
+	b.coverageSubs = append(b.coverageSubs, ptr)
+	return func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		for i, p := range b.coverageSubs {
+			if p == ptr {
+				b.coverageSubs[i] = nil
+				return
+			}
+		}
+	}
 }
 
 // SubscribeLinkState registers h to be called for every LinkStateEvent
-// that passes the throttle.
-func (b *Bus) SubscribeLinkState(h LinkStateHandler) {
+// that passes the throttle. Returns an unsubscribe function.
+func (b *Bus) SubscribeLinkState(h LinkStateHandler) func() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.linkStateSubs = append(b.linkStateSubs, h)
+	ptr := &h
+	b.linkStateSubs = append(b.linkStateSubs, ptr)
+	return func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		for i, p := range b.linkStateSubs {
+			if p == ptr {
+				b.linkStateSubs[i] = nil
+				return
+			}
+		}
+	}
 }
 
 // SubscribeObservability registers h to be called for every
-// ObservabilityEvent.
-func (b *Bus) SubscribeObservability(h ObservabilityHandler) {
+// ObservabilityEvent. Returns an unsubscribe function.
+func (b *Bus) SubscribeObservability(h ObservabilityHandler) func() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.observabilitySubs = append(b.observabilitySubs, h)
+	ptr := &h
+	b.observabilitySubs = append(b.observabilitySubs, ptr)
+	return func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		for i, p := range b.observabilitySubs {
+			if p == ptr {
+				b.observabilitySubs[i] = nil
+				return
+			}
+		}
+	}
 }
 
 // PublishCoverageEvent notifies all coverage subscribers. Never
 // throttled — coverage transitions are discrete and every one matters.
 func (b *Bus) PublishCoverageEvent(ev CoverageEvent) {
 	b.mu.Lock()
-	subs := append([]CoverageHandler(nil), b.coverageSubs...)
+	subs := make([]*CoverageHandler, len(b.coverageSubs))
+	copy(subs, b.coverageSubs)
 	b.mu.Unlock()
 
-	for _, h := range subs {
-		h(ev)
+	for _, p := range subs {
+		if p != nil {
+			(*p)(ev)
+		}
 	}
 }
 
@@ -101,23 +138,29 @@ func (b *Bus) PublishLinkState(state condition.LinkState, now time.Time) {
 	b.lastLinkVal = state
 	b.lastLinkAt = now
 	b.hasLinkState = true
-	subs := append([]LinkStateHandler(nil), b.linkStateSubs...)
+	subs := make([]*LinkStateHandler, len(b.linkStateSubs))
+	copy(subs, b.linkStateSubs)
 	b.mu.Unlock()
 
 	ev := LinkStateEvent{State: state, At: now}
-	for _, h := range subs {
-		h(ev)
+	for _, p := range subs {
+		if p != nil {
+			(*p)(ev)
+		}
 	}
 }
 
 // Emit notifies all observability subscribers. Never throttled.
 func (b *Bus) Emit(ev ObservabilityEvent) {
 	b.mu.Lock()
-	subs := append([]ObservabilityHandler(nil), b.observabilitySubs...)
+	subs := make([]*ObservabilityHandler, len(b.observabilitySubs))
+	copy(subs, b.observabilitySubs)
 	b.mu.Unlock()
 
-	for _, h := range subs {
-		h(ev)
+	for _, p := range subs {
+		if p != nil {
+			(*p)(ev)
+		}
 	}
 }
 

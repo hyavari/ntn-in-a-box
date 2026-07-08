@@ -204,3 +204,70 @@ func TestPublishLinkState_ConcurrentPublishAndSubscribeIsRaceFree(t *testing.T) 
 		t.Fatal("expected at least some publishes to be delivered")
 	}
 }
+
+
+func TestUnsubscribeCoverage(t *testing.T) {
+	b := New(DefaultLinkStateThrottle)
+	var count int
+	unsub := b.SubscribeCoverage(func(ev CoverageEvent) { count++ })
+
+	b.PublishCoverageEvent(CoverageEvent{Kind: KindWindowOpened, At: testStart})
+	if count != 1 {
+		t.Fatalf("before unsub: count = %d, want 1", count)
+	}
+
+	unsub()
+
+	b.PublishCoverageEvent(CoverageEvent{Kind: KindWindowClosed, At: testStart})
+	if count != 1 {
+		t.Fatalf("after unsub: count = %d, want 1 (unchanged)", count)
+	}
+}
+
+func TestUnsubscribeLinkState(t *testing.T) {
+	b := New(LinkStateThrottle{Interval: 0, DeltaThreshold: 0})
+	var count int
+	unsub := b.SubscribeLinkState(func(ev LinkStateEvent) { count++ })
+
+	b.PublishLinkState(condition.LinkState{DelayMs: 10}, testStart)
+	if count != 1 {
+		t.Fatalf("before unsub: count = %d, want 1", count)
+	}
+
+	unsub()
+
+	b.PublishLinkState(condition.LinkState{DelayMs: 20}, testStart.Add(time.Second))
+	if count != 1 {
+		t.Fatalf("after unsub: count = %d, want 1 (unchanged)", count)
+	}
+}
+
+func TestUnsubscribe_OtherSubscribersUnaffected(t *testing.T) {
+	b := New(DefaultLinkStateThrottle)
+	var countA, countB int
+	unsubA := b.SubscribeCoverage(func(ev CoverageEvent) { countA++ })
+	b.SubscribeCoverage(func(ev CoverageEvent) { countB++ })
+
+	b.PublishCoverageEvent(CoverageEvent{Kind: KindWindowOpened, At: testStart})
+	if countA != 1 || countB != 1 {
+		t.Fatalf("both should be 1: A=%d, B=%d", countA, countB)
+	}
+
+	unsubA()
+
+	b.PublishCoverageEvent(CoverageEvent{Kind: KindWindowClosed, At: testStart})
+	if countA != 1 {
+		t.Errorf("A should stay 1 after unsub, got %d", countA)
+	}
+	if countB != 2 {
+		t.Errorf("B should be 2, got %d", countB)
+	}
+}
+
+func TestUnsubscribe_CalledTwiceIsSafe(t *testing.T) {
+	b := New(DefaultLinkStateThrottle)
+	unsub := b.SubscribeCoverage(func(ev CoverageEvent) {})
+
+	unsub()
+	unsub() // second call should not panic
+}

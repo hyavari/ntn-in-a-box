@@ -19,6 +19,7 @@ type Config struct {
 	Evaluator *condition.Evaluator
 	Profile   *profile.Profile
 	CmdFn     func() *exec.Cmd // returns the prepared command (e.g. ns.Command)
+	Addr      string           // API host address (for displaying GUI URL)
 }
 
 const defaultBufferCapacity = 10000
@@ -28,6 +29,7 @@ const defaultBufferCapacity = 10000
 // ensures the child is terminated and the terminal is restored.
 func Run(ctx context.Context, cfg Config) error {
 	model := NewModel(*cfg.Profile, defaultBufferCapacity)
+	model.addr = cfg.Addr
 
 	program := tea.NewProgram(
 		model,

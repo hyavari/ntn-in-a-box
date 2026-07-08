@@ -60,7 +60,9 @@ go build -o poller ./cmd/poller/
 echo "==> building docker image..."
 docker build -t ntnbox:latest . -q
 
-echo "==> running: ntnbox run ${TUI_FLAG} --profile $PROFILE_PATH -- ${CMD[*]}"
+echo "==> running: ntnbox run ${TUI_FLAG} --addr :8080 --profile $PROFILE_PATH -- ${CMD[*]}"
+echo ""
+echo "    GUI available at: http://localhost:8080/ui"
 echo ""
 
-./ntnbox run ${TUI_FLAG} --profile "$PROFILE_PATH" -- "${CMD[@]}"
+./ntnbox run ${TUI_FLAG} --addr :8080 --profile "$PROFILE_PATH" -- "${CMD[@]}"

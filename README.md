@@ -79,13 +79,16 @@ Requires Docker Desktop installed and running. Bare command names
 A convenience script that builds everything, runs a demo, and cleans up:
 
 ```bash
-./scripts/demo.sh                              # default: LEO pass + poller
-./scripts/demo.sh --tui                        # with live TUI dashboard
+./scripts/demo.sh                              # default: LEO pass + poller + GUI at :8080
+./scripts/demo.sh --tui                        # with live TUI dashboard + GUI
 ./scripts/demo.sh geo_steady                   # different profile
 ./scripts/demo.sh --tui geo_steady             # TUI + specific profile
 ./scripts/demo.sh d2c_burst curl http://example.com   # custom command
 PRUNE=1 ./scripts/demo.sh                     # also remove docker image on exit
 ```
+
+The GUI is always available at `http://localhost:8080/ui` when using
+the demo script.
 
 ### TUI Dashboard
 
@@ -110,6 +113,33 @@ Keyboard controls:
 The TUI auto-degrades to a stacked layout on terminals narrower than
 100 columns. Without `--tui`, output behaves exactly as before
 (scrolling logs, suitable for CI/piping).
+
+### GUI Visualization
+
+When running with `--addr`, a web-based GUI is available that shows a
+live satellite pass animation:
+
+```bash
+sudo ./ntnbox run --addr :8080 --profile testdata/profiles/leo_pass_90s.yaml -- ./poller
+
+# Open in browser:
+# http://localhost:8080/ui
+```
+
+The GUI shows:
+- **Left panel:** animated satellite moving along an orbit arc, coverage
+  beam connecting to a ground device, sky darkening on coverage loss
+- **Right panel:** live link metrics with sparklines, coverage timeline,
+  window progress bar, and profile details (name, mode, schedule)
+
+Features:
+- Real-time updates via Server-Sent Events (no polling)
+- Idle overlay when no session is active
+- Responsive: stacks on narrow screens, hides animation on very narrow
+- Works alongside `--tui` — open the GUI in a browser while TUI runs
+  in the terminal
+
+The GUI is embedded in the binary — no separate server or files needed.
 
 ### Query the kernel API (any platform)
 
@@ -241,6 +271,8 @@ outages via timeouts, which is exactly what NTN-aware apps need to handle.
 | GET | `/devices/{id}` | Get a device |
 | GET | `/devices/{id}/condition` | Current coverage + link state |
 | GET | `/sandbox/status` | Current shaping values (Dev Sandbox) |
+| GET | `/events` | SSE stream of real-time coverage + link-state events |
+| GET | `/ui/` | Web GUI (satellite pass visualization) |
 
 ## Development
 

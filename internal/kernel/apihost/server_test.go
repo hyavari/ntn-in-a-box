@@ -6,10 +6,19 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/hyavari/ntn-in-a-box/internal/kernel/condition"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/device"
+	"github.com/hyavari/ntn-in-a-box/internal/kernel/eventbus"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/profile"
 )
+
+var testStart = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+func newTestBus() *eventbus.Bus {
+	return eventbus.New(eventbus.LinkStateThrottle{Interval: 0, DeltaThreshold: 0})
+}
 
 func testServer(t *testing.T) (*Server, *httptest.Server) {
 	t.Helper()
@@ -338,5 +347,127 @@ func TestGetConditionDeviceNotFound(t *testing.T) {
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+
+func TestSSE_NoBus_Returns503(t *testing.T) {
+	srv := New(Config{
+		Profiles: []*profile.Profile{},
+		Registry: device.NewRegistry(),
+		Bus:      nil,
+	})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503", resp.StatusCode)
+	}
+}
+
+func TestSSE_StreamsEvents(t *testing.T) {
+	bus := newTestBus()
+	srv := New(Config{
+		Profiles: []*profile.Profile{},
+		Registry: device.NewRegistry(),
+		Bus:      bus,
+	})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	// Connect to SSE endpoint.
+	resp, err := http.Get(ts.URL + "/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
+		t.Errorf("Content-Type = %q, want text/event-stream", ct)
+	}
+
+	// Publish a link-state event to the bus.
+	bus.PublishLinkState(condition.LinkState{
+		DelayMs:       42,
+		JitterMs:      5,
+		LossPct:       0.2,
+		BandwidthKbps: 20000,
+	}, testStart)
+
+	// Read from the response body.
+	buf := make([]byte, 4096)
+	n, err := resp.Body.Read(buf)
+	if err != nil {
+		t.Fatalf("reading SSE stream: %v", err)
+	}
+	body := string(buf[:n])
+
+	if !bytes.Contains([]byte(body), []byte("event: linkstate")) {
+		t.Errorf("expected 'event: linkstate' in body, got:\n%s", body)
+	}
+	if !bytes.Contains([]byte(body), []byte(`"delay_ms":42`)) {
+		t.Errorf("expected delay_ms:42 in body, got:\n%s", body)
+	}
+}
+
+
+func TestUI_ServesIndexHTML(t *testing.T) {
+	srv := New(Config{
+		Profiles: []*profile.Profile{},
+		Registry: device.NewRegistry(),
+	})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/ui/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /ui/ status = %d, want 200", resp.StatusCode)
+	}
+
+	var body bytes.Buffer
+	body.ReadFrom(resp.Body)
+	if !bytes.Contains(body.Bytes(), []byte("NTN-in-a-Box")) {
+		t.Error("expected 'NTN-in-a-Box' in response body")
+	}
+}
+
+func TestUI_RedirectsFromUI(t *testing.T) {
+	srv := New(Config{
+		Profiles: []*profile.Profile{},
+		Registry: device.NewRegistry(),
+	})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	client := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+
+	resp, err := client.Get(ts.URL + "/ui")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusMovedPermanently {
+		t.Errorf("GET /ui status = %d, want 301", resp.StatusCode)
+	}
+	loc := resp.Header.Get("Location")
+	if loc != "/ui/" {
+		t.Errorf("Location = %q, want /ui/", loc)
 	}
 }
