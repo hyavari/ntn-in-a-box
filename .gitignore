@@ -5,6 +5,7 @@ docs/
 # Built binaries
 /ntnbox
 /poller
+/messenger-client
 
 # Go
 *.exe

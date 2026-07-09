@@ -79,11 +79,13 @@ Requires Docker Desktop installed and running. Bare command names
 A convenience script that builds everything, runs a demo, and cleans up:
 
 ```bash
-./scripts/demo.sh                              # default: LEO pass + poller + GUI at :8080
-./scripts/demo.sh --tui                        # with live TUI dashboard + GUI
+./scripts/demo.sh                              # default: LEO pass + poller
+./scripts/demo.sh --tui                        # with live TUI dashboard
+./scripts/demo.sh --sample curl-demo           # curl polling demo
+./scripts/demo.sh --sample go-messenger        # Go messenger with queue/flush
+./scripts/demo.sh --tui --sample go-messenger  # TUI + sample
 ./scripts/demo.sh geo_steady                   # different profile
-./scripts/demo.sh --tui geo_steady             # TUI + specific profile
-./scripts/demo.sh d2c_burst curl http://example.com   # custom command
+./scripts/demo.sh d2c_burst curl https://example.com  # custom command
 PRUNE=1 ./scripts/demo.sh                     # also remove docker image on exit
 ```
 
@@ -160,6 +162,38 @@ curl http://localhost:8080/devices/ue-1/condition
 # {"in_coverage":true,"elapsed_sec":2.3,"until_next_transition_sec":87.7,
 #  "delay_ms":135.6,"jitter_ms":28.3,"loss_pct":7.1,"bandwidth_kbps":4400}
 ```
+
+## Sample applications
+
+Ready-to-run examples in multiple languages showing how apps behave
+under NTN conditions:
+
+| Sample | Language | Pattern |
+|--------|----------|---------|
+| `samples/curl-demo.sh` | Shell | Simple polling — see latency and timeouts |
+| `samples/node-retry/` | Node.js | Exponential backoff + offline queue |
+| `samples/python-adaptive/` | Python | Latency-based state detection + store-and-forward |
+| `samples/go-messenger/` | Go | Client/server messaging with queue flush |
+
+```bash
+# Via demo script (builds Docker, easiest on macOS):
+./scripts/demo.sh --sample curl-demo
+./scripts/demo.sh --sample go-messenger
+
+# Direct (Linux native):
+ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- ./samples/curl-demo.sh
+ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- node samples/node-retry/index.js
+ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- python3 samples/python-adaptive/client.py
+```
+
+The Docker image includes only Go binaries (ntnbox + poller) and curl.
+Node.js and Python samples require their runtimes on the host (Linux
+native). Shell and Go samples work on macOS via the Docker proxy
+(cross-compiled and bind-mounted automatically).
+
+No code changes needed in your app — ntnbox shapes the network
+transparently at the OS level. See [TUTORIAL.md](TUTORIAL.md) for a
+step-by-step walkthrough.
 
 ## Architecture
 

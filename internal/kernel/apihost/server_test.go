@@ -469,3 +469,69 @@ func TestUI_RedirectsFromUI(t *testing.T) {
 		t.Errorf("Location = %q, want /ui/", loc)
 	}
 }
+
+
+func TestCapabilities_ReturnsDeviceCapabilities(t *testing.T) {
+	_, ts := testServer(t)
+	defer ts.Close()
+
+	// Register a device first.
+	body := `{"id":"cap-test","type":"virtual_ue","profile_name":"leo_pass_90s"}`
+	resp, err := http.Post(ts.URL+"/devices", "application/json", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("register device: status %d", resp.StatusCode)
+	}
+
+	// Get capabilities.
+	resp, err = http.Get(ts.URL + "/devices/cap-test/capabilities")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	var caps struct {
+		Data             bool    `json:"data"`
+		CoverageMode     string  `json:"coverage_mode"`
+		MaxBandwidthKbps float64 `json:"max_bandwidth_kbps"`
+		SupportsPrediction bool  `json:"supports_prediction"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&caps); err != nil {
+		t.Fatal(err)
+	}
+
+	if !caps.Data {
+		t.Error("data should be true")
+	}
+	if caps.CoverageMode != "periodic" {
+		t.Errorf("coverage_mode = %q, want periodic", caps.CoverageMode)
+	}
+	if caps.MaxBandwidthKbps != 2000 {
+		t.Errorf("max_bandwidth_kbps = %f, want 2000", caps.MaxBandwidthKbps)
+	}
+	if !caps.SupportsPrediction {
+		t.Error("supports_prediction should be true")
+	}
+}
+
+func TestCapabilities_NotFound(t *testing.T) {
+	_, ts := testServer(t)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/devices/nonexistent/capabilities")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}

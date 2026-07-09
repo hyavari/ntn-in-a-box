@@ -1,0 +1,211 @@
+# Tutorial: Building NTN-Aware Applications
+
+This tutorial walks you through testing applications under simulated
+satellite conditions using NTN-in-a-Box. You'll see how real apps
+experience coverage gaps, latency spikes, and bandwidth constraints —
+and learn the patterns that make apps resilient to these conditions.
+
+## Prerequisites
+
+- Docker Desktop (macOS) or Linux with root access
+- Go 1.26+ (to build ntnbox)
+- Node.js, Python 3, or Go for the sample apps
+
+## Step 1: Run the simplest demo
+
+The fastest way to see NTN conditions in action is the curl demo:
+
+```bash
+# Build and run via the demo script:
+./scripts/demo.sh --sample curl-demo
+
+# Or manually:
+go build -o ntnbox ./cmd/ntnbox
+sudo ./ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- ./samples/curl-demo.sh
+```
+
+You'll see output like:
+
+```
+  TIME        STATUS  LATENCY     RESULT
+  ─────────────────────────────────────────────────
+  10:00:01    200     152ms       ok          ← satellite rising (high delay)
+  10:00:03    200     43ms        ok          ← overhead (low delay)
+  10:00:05    200     41ms        ok
+  ...
+  10:01:30    ---     —           timeout     ← coverage lost
+  10:01:32    ---     —           timeout
+  ...
+  10:10:00    200     148ms       ok          ← next pass begins
+```
+
+## Step 2: Understand the profiles
+
+NTN-in-a-Box uses YAML profiles to define satellite pass characteristics:
+
+```yaml
+# testdata/profiles/leo_pass_90s.yaml
+name: leo_pass_90s
+schedule:
+  mode: periodic # satellite passes repeatedly
+  period_sec: 600 # one pass every 10 minutes
+  window_sec: 90 # each pass lasts 90 seconds
+  lookahead_sec: 30 # 30s advance warning before transitions
+
+curves:
+  delay_ms: # latency varies during the pass
+    - { offset_sec: 0, value: 150 } # horizon: high delay
+    - { offset_sec: 15, value: 40 } # overhead: low delay
+    - { offset_sec: 75, value: 40 }
+    - { offset_sec: 90, value: 100 } # setting: delay rises
+  # jitter_ms, loss_pct, bandwidth_kbps follow similar curves
+```
+
+Available profiles:
+
+- `leo_pass_90s` — single-satellite LEO pass (Iridium/Swarm-style visibility windows)
+- `geo_steady` — continuous GEO link (always connected, variable quality)
+- `d2c_burst` — short burst windows (Direct-to-Cell store-and-forward style)
+
+## Step 3: Test a Node.js app with retry logic
+
+The Node.js sample demonstrates exponential backoff and offline queuing:
+
+```bash
+ntnbox run --profile testdata/profiles/leo_pass_90s.yaml \
+  -- node samples/node-retry/index.js
+```
+
+Watch the output:
+
+- Messages send successfully during coverage
+- On coverage loss: retries with exponential backoff, then queues
+- On coverage return: queue flushes automatically
+
+**Key pattern:** The app doesn't need to know about satellites. It
+just handles network failures gracefully — which is exactly what
+NTN-aware apps must do.
+
+## Step 4: Test a Python app with adaptive behavior
+
+The Python sample adapts its behavior based on observed conditions:
+
+```bash
+ntnbox run --profile testdata/profiles/leo_pass_90s.yaml \
+  -- python3 samples/python-adaptive/client.py
+```
+
+This demo shows:
+
+- Link state detection (online → degraded → offline)
+- Reduced polling frequency when degraded
+- Store-and-forward during outages
+
+**Key pattern:** Detect constraints and adapt. Don't hammer a degraded
+link — reduce load and batch operations.
+
+## Step 5: Test a Go messenger with queue flush
+
+This demonstrates a messaging client with offline queuing. By default
+it checks connectivity against `https://example.com` — no server
+setup needed:
+
+```bash
+./scripts/demo.sh --sample go-messenger
+```
+
+Messages succeed during coverage and timeout during gaps. The client
+queues locally and flushes when the next pass begins.
+
+To demo the full client/server flow (Linux only — env vars are not
+forwarded through the macOS Docker proxy):
+
+```bash
+# Terminal 1: start the server
+go run samples/go-messenger/server/main.go
+# Terminal 2: run client targeting the server (Linux native)
+sudo SERVER_URL=http://10.200.0.1:9090/send \
+  ./ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- ./messenger-client
+```
+
+**Key pattern:** Queue locally, flush on reconnect. This is the
+store-and-forward pattern that real satellite messaging uses.
+
+## Step 6: Use the TUI dashboard
+
+Add `--tui` to see a live dashboard while your app runs:
+
+```bash
+ntnbox run --tui --profile testdata/profiles/leo_pass_90s.yaml \
+  -- node samples/node-retry/index.js
+```
+
+The dashboard shows:
+
+- Coverage status and countdown
+- Link metrics (delay, jitter, loss, bandwidth) with sparklines
+- Your app's output in a scrollable pane
+
+## Step 7: Use the GUI visualization
+
+Add `--addr :8080` to enable the web GUI:
+
+```bash
+ntnbox run --addr :8080 --profile testdata/profiles/leo_pass_90s.yaml \
+  -- python3 samples/python-adaptive/client.py
+```
+
+Open `http://localhost:8080/ui` in your browser to see:
+
+- Animated satellite moving along its orbit
+- Coverage beam connecting to the ground device
+- Real-time metrics and coverage timeline
+
+## Step 8: Test your own app
+
+Any application that makes network requests can be tested:
+
+```bash
+ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- ./your-app
+```
+
+No code changes needed — ntnbox shapes the network transparently
+at the OS level. Your app sees real delays, real packet loss, and
+real connectivity gaps.
+
+## Step 9: Query the API
+
+While running with `--addr`, you can query satellite state
+programmatically:
+
+```bash
+# Current condition (coverage, delay, jitter, loss, bandwidth):
+curl http://localhost:8080/devices/sandbox-0/condition
+
+# Satellite capabilities:
+curl http://localhost:8080/devices/sandbox-0/capabilities
+
+# Live event stream (Server-Sent Events):
+curl -N http://localhost:8080/events
+```
+
+This lets your app adapt in real time based on satellite state.
+
+## Patterns for NTN-aware apps
+
+| Pattern                                  | When to use                                              |
+| ---------------------------------------- | -------------------------------------------------------- |
+| Exponential backoff                      | Always — don't hammer a failing link                     |
+| Offline queue                            | Messaging, sync, uploads — anything that can be deferred |
+| Adaptive timeout                         | Increase timeouts when latency is high                   |
+| Reduce payload size on constrained links |
+| Burst transfer                           | Transfer data in bursts during coverage, sleep between   |
+| Graceful degradation                     | Reduce functionality when link quality drops             |
+
+## Next steps
+
+- Try different profiles (`geo_steady`, `d2c_burst`) to see how
+  your app handles different satellite architectures
+- Build a custom profile that matches your target constellation
+- Use the `--addr` API to build satellite-aware features in your app
+- Check the [API reference](README.md#api-reference) for all endpoints

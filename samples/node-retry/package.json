@@ -1,0 +1,9 @@
+{
+  "name": "ntn-retry-demo",
+  "version": "1.0.0",
+  "description": "NTN-in-a-Box sample: HTTP client with exponential backoff and offline queue",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  }
+}
