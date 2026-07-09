@@ -274,6 +274,7 @@ outages via timeouts, which is exactly what NTN-aware apps need to handle.
 | GET | `/devices` | List registered devices |
 | GET | `/devices/{id}` | Get a device |
 | GET | `/devices/{id}/condition` | Current coverage + link state |
+| GET | `/devices/{id}/capabilities` | Satellite capability discovery |
 | GET | `/sandbox/status` | Current shaping values (Dev Sandbox) |
 | GET | `/events` | SSE stream of real-time coverage + link-state events |
 | GET | `/ui/` | Web GUI (satellite pass visualization) |

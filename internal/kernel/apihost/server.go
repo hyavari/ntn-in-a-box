@@ -95,6 +95,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /devices", s.handleListDevices)
 	s.mux.HandleFunc("GET /devices/{id}", s.handleGetDevice)
 	s.mux.HandleFunc("GET /devices/{id}/condition", s.handleGetCondition)
+	s.mux.HandleFunc("GET /devices/{id}/capabilities", s.handleGetCapabilities)
 	s.mux.HandleFunc("GET /events", s.handleSSE)
 	s.registerUI()
 }
@@ -262,4 +263,52 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+type capabilitiesResponse struct {
+	Messaging       bool    `json:"messaging"`
+	StoreAndForward bool    `json:"store_and_forward"`
+	SOS             bool    `json:"sos"`
+	Voice           bool    `json:"voice"`
+	Data            bool    `json:"data"`
+	CoverageMode    string  `json:"coverage_mode"`
+	MaxBandwidthKbps float64 `json:"max_bandwidth_kbps"`
+	SupportsPrediction bool `json:"supports_prediction"`
+}
+
+func (s *Server) handleGetCapabilities(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	d, err := s.registry.Get(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+
+	p, ok := s.profiles[d.ProfileName]
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "profile not found: " + d.ProfileName})
+		return
+	}
+
+	// Compute max bandwidth from the profile's curves.
+	var maxBw float64
+	for _, pt := range p.Curves.BandwidthKbps {
+		if pt.Value > maxBw {
+			maxBw = pt.Value
+		}
+	}
+
+	resp := capabilitiesResponse{
+		Messaging:        false, // not yet implemented
+		StoreAndForward:  false, // not yet implemented
+		SOS:              false, // not yet implemented
+		Voice:            false, // not yet implemented
+		Data:             true,  // always available (Dev Sandbox shapes data)
+		CoverageMode:     string(p.Schedule.Mode),
+		MaxBandwidthKbps: maxBw,
+		SupportsPrediction: true, // evaluator can predict future state
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
