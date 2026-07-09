@@ -25,7 +25,7 @@ jobs:
         with:
           go-version: '1.26'
 
-      # Pre-build ntnbox so the action steps don't each rebuild.
+      # Pre-build so the action's install step is a no-op.
       - name: Pre-build ntnbox
         run: |
           go build -o /tmp/ntnbox ./cmd/ntnbox/
@@ -36,6 +36,12 @@ jobs:
         with:
           profile: leo_pass_90s
           command: echo "hello from NTN"
+
+      - name: Test toolchain PATH preserved
+        uses: ./
+        with:
+          profile: leo_pass_90s
+          command: go version
 
       - name: Test with replay
         uses: ./
