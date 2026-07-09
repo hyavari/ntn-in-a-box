@@ -30,3 +30,4 @@ vendor/
 
 # Session recordings
 *.jsonl
+!testdata/sessions/smoke.jsonl

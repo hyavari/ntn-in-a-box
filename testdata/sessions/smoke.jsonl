@@ -1,0 +1,3 @@
+{"type":"coverage","kind":"window_opened","at":"2026-01-01T00:00:00Z","in_coverage":true,"elapsed_sec":0,"until_next_transition":10}
+{"type":"linkstate","delay_ms":150,"jitter_ms":20,"loss_pct":2,"bandwidth_kbps":5000,"at":"2026-01-01T00:00:00.1Z"}
+{"type":"coverage","kind":"window_closed","at":"2026-01-01T00:00:10Z","in_coverage":false,"elapsed_sec":0,"until_next_transition":50}

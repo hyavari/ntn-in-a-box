@@ -1,0 +1,35 @@
+name: Action Smoke Test
+on:
+  push:
+    paths:
+      - 'action.yml'
+      - 'cmd/ntnbox/**'
+      - 'internal/**'
+  pull_request:
+    paths:
+      - 'action.yml'
+      - 'cmd/ntnbox/**'
+      - 'internal/**'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Test with built-in profile
+        uses: ./
+        with:
+          profile: leo_pass_90s
+          command: echo "hello from NTN"
+
+      - name: Test with replay
+        uses: ./
+        with:
+          replay: testdata/sessions/smoke.jsonl
+          speed: '100'
+          command: echo "replayed"

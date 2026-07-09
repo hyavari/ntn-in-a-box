@@ -5,17 +5,72 @@ branding:
   color: 'blue'
 inputs:
   profile:
-    description: 'Profile name (e.g. leo_pass_90s) or path to a YAML file'
+    description: 'Profile name (e.g. leo_pass_90s) or path to a YAML file. Required unless replay is set.'
   command:
     description: 'Command to run under NTN conditions'
     required: true
   replay:
-    description: 'Path to a JSONL recording to replay instead of using a profile'
+    description: 'Path to a JSONL recording to replay instead of using a profile. Required unless profile is set.'
   speed:
     description: 'Replay speed multiplier'
     default: '1'
   record:
     description: 'Path to save a recording of this session'
+  version:
+    description: 'NTN-in-a-Box version to install (git ref)'
+    default: 'master'
 runs:
-  using: 'docker'
-  image: 'Dockerfile.action'
+  using: 'composite'
+  steps:
+    - name: Install ntnbox
+      shell: bash
+      run: |
+        # Install iproute2 if tc is not available (needed for netem).
+        if ! command -v tc &>/dev/null; then
+          sudo apt-get update -qq && sudo apt-get install -y -qq iproute2 >/dev/null
+        fi
+        # Build ntnbox from source.
+        cd "$GITHUB_ACTION_PATH"
+        go build -o /tmp/ntnbox ./cmd/ntnbox/
+        sudo cp /tmp/ntnbox /usr/local/bin/ntnbox
+
+    - name: Run under NTN conditions
+      shell: bash
+      env:
+        INPUT_PROFILE: ${{ inputs.profile }}
+        INPUT_COMMAND: ${{ inputs.command }}
+        INPUT_REPLAY: ${{ inputs.replay }}
+        INPUT_SPEED: ${{ inputs.speed }}
+        INPUT_RECORD: ${{ inputs.record }}
+      run: |
+        # Resolve profile path.
+        if [ -n "$INPUT_REPLAY" ]; then
+          exec sudo ntnbox replay \
+            --file "$INPUT_REPLAY" \
+            --speed "${INPUT_SPEED:-1}" \
+            -- sh -c "$INPUT_COMMAND"
+        fi
+
+        if [ -z "$INPUT_PROFILE" ]; then
+          echo "::error::either 'profile' or 'replay' input is required"
+          exit 1
+        fi
+
+        # Profile resolution: contains slash → path; otherwise built-in.
+        profile="$INPUT_PROFILE"
+        case "$profile" in
+          */*) ;;
+          *)   profile="${GITHUB_ACTION_PATH}/testdata/profiles/${profile}.yaml" ;;
+        esac
+
+        if [ ! -f "$profile" ]; then
+          echo "::error::profile not found: $profile"
+          exit 1
+        fi
+
+        args=(--profile "$profile")
+        if [ -n "$INPUT_RECORD" ]; then
+          args+=(--record "$INPUT_RECORD")
+        fi
+
+        exec sudo ntnbox run "${args[@]}" -- sh -c "$INPUT_COMMAND"

@@ -210,6 +210,12 @@ Run your CI tests under simulated NTN conditions with a single step:
     command: npm test
 ```
 
+Requires `ubuntu-latest` (or any Linux runner with `sudo`, `ip`, and
+Go installed). The action builds `ntnbox` from source and runs it with
+`sudo` to create network namespaces. Your job's toolchain (Node, Go,
+Python, etc.) is available to the command since it runs directly on the
+host.
+
 ### Inputs
 
 | Input | Required | Default | Description |
@@ -219,31 +225,42 @@ Run your CI tests under simulated NTN conditions with a single step:
 | `replay` | No* | — | Path to a JSONL recording (overrides `profile`) |
 | `speed` | No | `1` | Replay speed multiplier |
 | `record` | No | — | Path to save a recording of this session |
+| `version` | No | `master` | Git ref to build from |
 
 *Either `profile` or `replay` is required.
 
 ### Examples
 
 ```yaml
-# Replay a recorded session at 10x speed for regression testing:
-- uses: hyavari/ntn-in-a-box@v1
-  with:
-    replay: testdata/sessions/regression.jsonl
-    speed: '10'
-    command: go test ./...
+jobs:
+  ntn-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
 
-# Record a session for later replay:
-- uses: hyavari/ntn-in-a-box@v1
-  with:
-    profile: leo_pass_90s
-    record: testdata/sessions/new.jsonl
-    command: ./my-app --smoke-test
+      # Run tests under a simulated LEO pass:
+      - uses: hyavari/ntn-in-a-box@v1
+        with:
+          profile: leo_pass_90s
+          command: npm test
 
-# Use a custom profile from the repo:
-- uses: hyavari/ntn-in-a-box@v1
-  with:
-    profile: testdata/profiles/my_custom.yaml
-    command: python3 test_client.py
+      # Replay a recorded session at 10x speed:
+      - uses: hyavari/ntn-in-a-box@v1
+        with:
+          replay: testdata/sessions/regression.jsonl
+          speed: '10'
+          command: npm test
+
+      # Record a session for later replay:
+      - uses: hyavari/ntn-in-a-box@v1
+        with:
+          profile: d2c_burst
+          record: testdata/sessions/new.jsonl
+          command: ./my-app --smoke-test
 ```
 
 The action exit code matches the wrapped command — your CI sees test
