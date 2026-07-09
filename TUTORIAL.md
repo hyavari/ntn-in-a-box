@@ -194,8 +194,11 @@ for reproducing bugs or running the same conditions in CI:
 
 The recording captures every coverage transition and link-state update
 as timestamped JSONL events. Replay reproduces them with exact timing.
-The file is human-readable and can be stored alongside your test suite
-for regression testing (add an exception to `.gitignore` or use a
+When replay completes, both the TUI and GUI show a clear "replay
+complete" status with a progress bar showing elapsed/total duration.
+In TUI mode, you can press `r` to immediately replay again or `q` to
+quit. The file is human-readable and can be stored alongside your test
+suite for regression testing (add an exception to `.gitignore` or use a
 dedicated directory like `testdata/sessions/`).
 
 **Example session.jsonl:**

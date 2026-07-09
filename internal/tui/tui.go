@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"syscall"
@@ -13,6 +14,9 @@ import (
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/profile"
 )
 
+// ErrReplayAgain is returned by Run when the user requests another replay.
+var ErrReplayAgain = errors.New("replay again requested")
+
 // Config holds the dependencies for running the TUI.
 type Config struct {
 	Bus       *eventbus.Bus
@@ -20,16 +24,26 @@ type Config struct {
 	Profile   *profile.Profile
 	CmdFn     func() *exec.Cmd // returns the prepared command (e.g. ns.Command)
 	Addr      string           // API host address (for displaying GUI URL)
+	IsReplay  bool             // true when running in replay mode
+
+	// NotifySender is called (if non-nil) with the program's Sender
+	// interface before Run blocks. This lets callers start background
+	// goroutines (e.g. the replayer) that send messages into the TUI.
+	// It is called synchronously before the child process starts, so
+	// any goroutines launched from it are guaranteed to see a valid
+	// Sender before the program begins processing.
+	NotifySender func(Sender)
 }
 
 const defaultBufferCapacity = 10000
 
 // Run starts the TUI dashboard. It blocks until the user quits or the
-// child process exits and the user dismisses the TUI. On exit it
-// ensures the child is terminated and the terminal is restored.
+// context is cancelled. On exit it ensures the child is terminated
+// and the terminal is restored.
 func Run(ctx context.Context, cfg Config) error {
 	model := NewModel(*cfg.Profile, defaultBufferCapacity)
 	model.addr = cfg.Addr
+	model.isReplay = cfg.IsReplay
 
 	program := tea.NewProgram(
 		model,
@@ -38,9 +52,20 @@ func Run(ctx context.Context, cfg Config) error {
 	)
 
 	// Set up the adapter and subscribe to the bus.
+	// Save unsubscribe funcs so we can clean up on exit (prevents
+	// subscriber leaks when the loop in replay.go calls Run again).
 	adapter := NewAdapter(program, cfg.Evaluator)
-	cfg.Bus.SubscribeCoverage(adapter.OnCoverage)
-	cfg.Bus.SubscribeLinkState(adapter.OnLinkState)
+	unsubCoverage := cfg.Bus.SubscribeCoverage(adapter.OnCoverage)
+	unsubLinkState := cfg.Bus.SubscribeLinkState(adapter.OnLinkState)
+	defer unsubCoverage()
+	defer unsubLinkState()
+
+	// Notify caller with the Sender *before* starting the child so
+	// any goroutines it launches (e.g. the replayer) are guaranteed
+	// to have a valid Sender when they first try to send a message.
+	if cfg.NotifySender != nil {
+		cfg.NotifySender(program)
+	}
 
 	// Prepare and start the child process.
 	cmd := cfg.CmdFn()
@@ -50,7 +75,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	// Run the TUI (blocks until tea.Quit).
-	_, err := program.Run()
+	finalModel, err := program.Run()
 
 	// On exit: ensure child is killed.
 	_ = runner.Signal(syscall.SIGTERM)
@@ -61,7 +86,16 @@ func Run(ctx context.Context, cfg Config) error {
 		<-runner.done
 	}
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Check if the user requested replay-again.
+	if m, ok := finalModel.(Model); ok && m.replayAgain {
+		return ErrReplayAgain
+	}
+
+	return nil
 }
 
 // cmdRunnerCmd is like CmdRunner but takes a pre-built *exec.Cmd

@@ -37,3 +37,15 @@ type CmdExitedMsg struct {
 type TickMsg struct {
 	At time.Time
 }
+
+// ReplayProgressMsg reports replay playback progress.
+type ReplayProgressMsg struct {
+	Elapsed time.Duration
+	Total   time.Duration
+}
+
+// ReplayDoneMsg signals that the replay has finished (successfully or
+// with an error). If Err is non-nil, the replay failed.
+type ReplayDoneMsg struct {
+	Err error
+}

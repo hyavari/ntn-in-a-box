@@ -120,7 +120,19 @@ func (r *Replayer) Run(ctx context.Context) error {
 		r.onProgress(totalDuration, totalDuration)
 	}
 
-	return scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	// Signal replay completion via the observability channel so it
+	// doesn't fan out to coverage subscribers (which would incorrectly
+	// trigger coverage-state logic).
+	r.bus.Emit(eventbus.ObservabilityEvent{
+		Name: eventbus.ObsReplayDone,
+		At:   time.Now(),
+	})
+
+	return nil
 }
 
 // scanDuration reads the file to determine the time span between

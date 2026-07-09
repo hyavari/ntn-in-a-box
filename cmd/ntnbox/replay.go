@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -106,50 +107,77 @@ func runReplay(args []string) error {
 		startAPIHost(*addr, bus, registry, nil)
 	}
 
-	// Start replayer.
+	fmt.Fprintf(os.Stderr, "ntnbox: replaying %s (speed: %.1fx)\n", *filePath, *speed)
+
+	// TUI mode.
+	if *tuiFlag {
+		for {
+			// Create a fresh replayer for each iteration.
+			replayer := recorder.NewReplayer(*filePath, bus, *speed)
+
+			// Use atomic.Value so the progress callback (called from the
+			// replayer goroutine) can safely read the sender set by
+			// NotifySender (called on the main goroutine).
+			var senderVal atomic.Value // stores ntntui.Sender
+
+			// Set up replay progress reporting.
+			replayer.OnProgress(func(elapsed, total time.Duration) {
+				if s, ok := senderVal.Load().(ntntui.Sender); ok && s != nil {
+					s.Send(ntntui.ReplayProgressMsg{
+						Elapsed: elapsed,
+						Total:   total,
+					})
+				}
+			})
+
+			err := ntntui.Run(ctx, ntntui.Config{
+				Bus:       bus,
+				Evaluator: nil,
+				Profile:   &profile.Profile{Name: "replay"},
+				Addr:      *addr,
+				IsReplay:  true,
+				// NotifySender fires before the child starts, so we
+				// start the replayer here to guarantee tuiSender is set
+				// before any progress/done messages are sent.
+				NotifySender: func(s ntntui.Sender) {
+					senderVal.Store(s)
+					go func() {
+						err := replayer.Run(ctx)
+						// Always notify the TUI — with error if replay failed.
+						if s, ok := senderVal.Load().(ntntui.Sender); ok && s != nil {
+							s.Send(ntntui.ReplayDoneMsg{Err: err})
+						}
+					}()
+				},
+				CmdFn: func() *exec.Cmd {
+					return ns.Command(cmdArgs[0], cmdArgs[1:]...)
+				},
+			})
+
+			if errors.Is(err, ntntui.ErrReplayAgain) {
+				// User wants to replay — loop around.
+				continue
+			}
+			return err
+		}
+	}
+
+	// Non-TUI: launch command, wait for replay to finish, then stop.
 	replayer := recorder.NewReplayer(*filePath, bus, *speed)
 	replayDone := make(chan error, 1)
 
-	// Print progress in non-TUI mode.
-	if !*tuiFlag {
-		replayer.OnProgress(func(elapsed, total time.Duration) {
-			pct := 0.0
-			if total > 0 {
-				pct = float64(elapsed) / float64(total) * 100
-			}
-			fmt.Fprintf(os.Stderr, "\rntnbox: replay %.0f%% (%s / %s)", pct, elapsed.Truncate(time.Second), total.Truncate(time.Second))
-		})
-	}
+	replayer.OnProgress(func(elapsed, total time.Duration) {
+		pct := 0.0
+		if total > 0 {
+			pct = float64(elapsed) / float64(total) * 100
+		}
+		fmt.Fprintf(os.Stderr, "\rntnbox: replay %.0f%% (%s / %s)", pct, elapsed.Truncate(time.Second), total.Truncate(time.Second))
+	})
 
 	go func() {
 		replayDone <- replayer.Run(ctx)
 	}()
 
-	fmt.Fprintf(os.Stderr, "ntnbox: replaying %s (speed: %.1fx)\n", *filePath, *speed)
-
-	// TUI mode.
-	if *tuiFlag {
-		// In TUI mode, the replayer runs alongside the TUI.
-		// When replay finishes, we send a message to the TUI output.
-		go func() {
-			<-replayDone
-			// Give a moment for final events to process.
-			time.Sleep(500 * time.Millisecond)
-			fmt.Fprintf(os.Stderr, "\nntnbox: replay complete. Press q to exit.\n")
-		}()
-
-		return ntntui.Run(ctx, ntntui.Config{
-			Bus:       bus,
-			Evaluator: nil,
-			Profile:   &profile.Profile{Name: "replay"},
-			Addr:      *addr,
-			CmdFn: func() *exec.Cmd {
-				return ns.Command(cmdArgs[0], cmdArgs[1:]...)
-			},
-		})
-	}
-
-	// Non-TUI: launch command, wait for replay to finish, then stop.
 	fmt.Fprintf(os.Stderr, "ntnbox: running %v\n", cmdArgs)
 	cmd := ns.Command(cmdArgs[0], cmdArgs[1:]...)
 	cmd.Stdout = os.Stdout

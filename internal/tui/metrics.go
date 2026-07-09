@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -48,6 +49,15 @@ func (m Model) renderLeftPanel(width int) string {
 
 // renderCoverageStatus renders the ▲/▼ status indicator.
 func (m Model) renderCoverageStatus(width int) string {
+	if m.isReplay {
+		if m.replayDone {
+			if m.replayErr != nil {
+				return " " + styleStatusRed.Render("✗ REPLAY FAILED")
+			}
+			return " " + styleStatusGreen.Render("✓ REPLAY COMPLETE")
+		}
+		return " " + styleDim.Render("▶ REPLAYING")
+	}
 	if m.inCoverage {
 		return " " + styleStatusGreen.Render("▲ IN COVERAGE")
 	}
@@ -57,6 +67,9 @@ func (m Model) renderCoverageStatus(width int) string {
 // renderProgressBar renders a colored progress bar with percentage and
 // countdown.
 func (m Model) renderProgressBar(width int) string {
+	if m.isReplay {
+		return m.renderReplayProgressBar(width)
+	}
 	// Format: " [████░░░░] 65% · 45s left"
 	suffix := fmt.Sprintf(" %.0f%% · %.0fs left", m.coveragePercent, m.remainingSec)
 	// barWidth = panel width - 1 leading space - 2 brackets - len(suffix)
@@ -88,6 +101,50 @@ func (m Model) renderProgressBar(width int) string {
 	}
 
 	return " " + styledBar + styleDim.Render(suffix)
+}
+
+// renderReplayProgressBar renders a progress bar for replay mode showing
+// elapsed / total duration.
+func (m Model) renderReplayProgressBar(width int) string {
+	pct := 0.0
+	if m.replayTotal > 0 {
+		pct = float64(m.replayElapsed) / float64(m.replayTotal) * 100
+	}
+	if pct > 100 {
+		pct = 100
+	}
+
+	suffix := fmt.Sprintf(" %.0f%% · %s / %s", pct, formatDuration(m.replayElapsed), formatDuration(m.replayTotal))
+	barWidth := width - 1 - 2 - len(suffix)
+	if barWidth < 5 {
+		barWidth = 5
+	}
+
+	filled := int(pct / 100 * float64(barWidth))
+	if filled > barWidth {
+		filled = barWidth
+	}
+	if filled < 0 {
+		filled = 0
+	}
+	empty := barWidth - filled
+
+	bar := strings.Repeat("█", filled) + strings.Repeat("░", empty)
+	styledBar := styleProgressGreen.Render("[" + bar + "]")
+
+	return " " + styledBar + styleDim.Render(suffix)
+}
+
+// formatDuration formats a duration as m:ss or h:mm:ss.
+func formatDuration(d time.Duration) string {
+	d = d.Truncate(time.Second)
+	h := int(d.Hours())
+	m := int(d.Minutes()) % 60
+	s := int(d.Seconds()) % 60
+	if h > 0 {
+		return fmt.Sprintf("%d:%02d:%02d", h, m, s)
+	}
+	return fmt.Sprintf("%d:%02d", m, s)
 }
 
 // renderLinkMetrics renders the four metric rows with values and
@@ -169,7 +226,12 @@ func (m Model) renderProfileInfo() string {
 
 // renderHelpLine renders the keyboard shortcut hints and GUI URL.
 func (m Model) renderHelpLine() string {
-	help := styleDim.Render(" [q]uit [f]ollow [Tab]expand [↑↓]scroll")
+	var help string
+	if m.isReplay && m.replayDone {
+		help = styleProgressGreen.Render(" [r]eplay again") + styleDim.Render(" · [q]uit")
+	} else {
+		help = styleDim.Render(" [q]uit [f]ollow [Tab]expand [↑↓]scroll")
+	}
 	if m.addr != "" {
 		help += "\n" + styleDim.Render(" GUI: http://localhost:"+addrPort(m.addr)+"/ui")
 	}
@@ -190,7 +252,17 @@ func addrPort(addr string) string {
 // stacked/expanded layout.
 func (m Model) renderStackedHeader() string {
 	var status string
-	if m.inCoverage {
+	if m.isReplay {
+		if m.replayDone {
+			status = styleStatusGreen.Render("✓ DONE")
+		} else {
+			pct := 0.0
+			if m.replayTotal > 0 {
+				pct = float64(m.replayElapsed) / float64(m.replayTotal) * 100
+			}
+			status = styleDim.Render(fmt.Sprintf("▶ %.0f%%", pct))
+		}
+	} else if m.inCoverage {
 		status = styleStatusGreen.Render("▲ IN")
 	} else {
 		status = styleStatusRed.Render("▼ OUT")
@@ -203,6 +275,15 @@ func (m Model) renderStackedHeader() string {
 			styleDim.Render("j:")+styleWhite.Render(fmt.Sprintf("%.0fms", m.linkState.JitterMs)),
 			styleDim.Render("l:")+styleWhite.Render(fmt.Sprintf("%.1f%%", m.linkState.LossPct)),
 			styleDim.Render("bw:")+styleWhite.Render(fmt.Sprintf("%.0fkb", m.linkState.BandwidthKbps)))
+	}
+
+	if m.isReplay {
+		return fmt.Sprintf(" %s · %s · %s / %s%s",
+			status,
+			styleDim.Render("replay"),
+			formatDuration(m.replayElapsed),
+			formatDuration(m.replayTotal),
+			metrics)
 	}
 
 	return fmt.Sprintf(" %s · %s · %.0f%% · %.0fs%s",

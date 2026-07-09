@@ -535,3 +535,47 @@ func TestCapabilities_NotFound(t *testing.T) {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
 	}
 }
+
+
+func TestSSE_ForwardsReplayDone(t *testing.T) {
+	bus := newTestBus()
+	srv := New(Config{
+		Profiles: []*profile.Profile{},
+		Registry: device.NewRegistry(),
+		Bus:      bus,
+	})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	// Connect to SSE endpoint.
+	resp, err := http.Get(ts.URL + "/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+
+	// Publish a replay_done observability event.
+	bus.Emit(eventbus.ObservabilityEvent{
+		Name: eventbus.ObsReplayDone,
+		At:   testStart,
+	})
+
+	// Read from the response body.
+	buf := make([]byte, 4096)
+	n, err := resp.Body.Read(buf)
+	if err != nil {
+		t.Fatalf("reading SSE stream: %v", err)
+	}
+	body := string(buf[:n])
+
+	if !bytes.Contains([]byte(body), []byte("event: lifecycle")) {
+		t.Errorf("expected 'event: lifecycle' in body, got:\n%s", body)
+	}
+	if !bytes.Contains([]byte(body), []byte(`"kind":"replay_done"`)) {
+		t.Errorf("expected kind:replay_done in body, got:\n%s", body)
+	}
+}

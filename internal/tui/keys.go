@@ -9,6 +9,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "q", "ctrl+c":
 		return m, tea.Quit
 
+	case "r":
+		if m.isReplay && m.replayDone {
+			m.replayAgain = true
+			return m, tea.Quit
+		}
+
 	case "f":
 		m.followMode = !m.followMode
 		if m.followMode && m.ready {

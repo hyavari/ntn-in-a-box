@@ -105,8 +105,10 @@ func TestReplayer_PublishesInOrder(t *testing.T) {
 
 	var covEvents []eventbus.CoverageEvent
 	var linkEvents []eventbus.LinkStateEvent
+	var obsEvents []eventbus.ObservabilityEvent
 	bus.SubscribeCoverage(func(ev eventbus.CoverageEvent) { covEvents = append(covEvents, ev) })
 	bus.SubscribeLinkState(func(ev eventbus.LinkStateEvent) { linkEvents = append(linkEvents, ev) })
+	bus.SubscribeObservability(func(ev eventbus.ObservabilityEvent) { obsEvents = append(obsEvents, ev) })
 
 	replayer := NewReplayer(path, bus, 1000) // 1000x speed for fast test
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -125,6 +127,9 @@ func TestReplayer_PublishesInOrder(t *testing.T) {
 	}
 	if covEvents[1].Kind != eventbus.KindWindowClosed {
 		t.Errorf("event[1].Kind = %q, want window_closed", covEvents[1].Kind)
+	}
+	if len(obsEvents) != 1 || obsEvents[0].Name != eventbus.ObsReplayDone {
+		t.Errorf("expected 1 observability event (replay_done), got %d", len(obsEvents))
 	}
 	if len(linkEvents) != 2 {
 		t.Fatalf("got %d link events, want 2", len(linkEvents))

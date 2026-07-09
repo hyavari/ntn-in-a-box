@@ -116,6 +116,7 @@ Keyboard controls:
 - `↑`/`↓`/`PgUp`/`PgDn` — scroll output
 - `f` — toggle follow mode (auto-scroll)
 - `Tab` — toggle expanded output view
+- `r` — replay again (shown after replay completes)
 
 The TUI auto-degrades to a stacked layout on terminals narrower than
 100 columns. Without `--tui`, output behaves exactly as before

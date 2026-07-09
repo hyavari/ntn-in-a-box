@@ -58,6 +58,12 @@ type ObservabilityEvent struct {
 	At     time.Time
 }
 
+// Well-known observability event names.
+const (
+	// ObsReplayDone is emitted when a replay session completes.
+	ObsReplayDone = "replay_done"
+)
+
 // CoverageHandler is called for every published CoverageEvent.
 type CoverageHandler func(CoverageEvent)
 

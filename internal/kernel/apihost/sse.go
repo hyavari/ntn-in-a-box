@@ -100,6 +100,18 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 
+	// Subscribe to observability events to forward replay lifecycle signals.
+	unsubObs := s.bus.SubscribeObservability(func(ev eventbus.ObservabilityEvent) {
+		if ev.Name != eventbus.ObsReplayDone {
+			return
+		}
+		msg := fmt.Sprintf("event: lifecycle\ndata: %s\n\n", `{"kind":"replay_done"}`)
+		select {
+		case ch <- []byte(msg):
+		default:
+		}
+	})
+
 	// Write loop: stream events until client disconnects.
 	ctx := r.Context()
 
@@ -127,6 +139,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		case <-ctx.Done():
 			unsubCoverage()
 			unsubLinkState()
+			unsubObs()
 			return
 		case msg := <-ch:
 			_, _ = w.Write(msg)

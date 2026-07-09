@@ -18,6 +18,7 @@ const state = {
     history: { delay: [], jitter: [], loss: [], bandwidth: [] },
     connected: false,
     hasData: false,
+    replayDone: false,
 };
 
 const MAX_HISTORY = 20;
@@ -66,6 +67,13 @@ function connect() {
 
     es.addEventListener('coverage', (e) => {
         const data = JSON.parse(e.data);
+
+        // If we receive a real coverage event after replay was done
+        // (e.g. replay-again started a new session), reset the done state.
+        if (state.replayDone) {
+            state.replayDone = false;
+        }
+
         state.inCoverage = data.in_coverage;
         if (data.elapsed_sec > 0 || data.until_next_transition > 0) {
             state.elapsedSec = data.elapsed_sec;
@@ -78,6 +86,19 @@ function connect() {
         state.hasData = true;
         hideIdle();
         updateAll();
+    });
+
+    es.addEventListener('lifecycle', (e) => {
+        const data = JSON.parse(e.data);
+        if (data.kind === 'replay_done') {
+            state.replayDone = true;
+            els.coverageIndicator.textContent = '✓ REPLAY COMPLETE';
+            els.coverageIndicator.classList.remove('out');
+            els.countdown.textContent = 'done';
+            els.progressFill.style.width = '100%';
+            els.progressFill.classList.remove('out');
+            els.progressInfo.textContent = '100% · complete';
+        }
     });
 
     es.addEventListener('linkstate', (e) => {
@@ -369,7 +390,7 @@ function addSegment(bar, widthPct, classes) {
 // --- Countdown tick ---
 
 setInterval(() => {
-    if (!state.hasData) return;
+    if (!state.hasData || state.replayDone) return;
     if (state.untilNext > 0) {
         state.untilNext -= 1;
     }

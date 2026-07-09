@@ -59,6 +59,14 @@ type Model struct {
 	cmdExited bool
 	exitCode  int
 
+	// Replay mode state.
+	isReplay       bool
+	replayElapsed  time.Duration
+	replayTotal    time.Duration
+	replayDone     bool
+	replayErr      error // non-nil if replay failed
+	replayAgain    bool  // set when user chooses to replay again
+
 	// API address (for displaying GUI URL).
 	addr string
 
@@ -134,6 +142,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pushSparkline(msg.State)
 
 	case OutputLineMsg:
+		// Stop showing output once replay is complete (child will be killed on exit).
+		if m.isReplay && m.replayDone {
+			break
+		}
 		m.output.Write(msg.Line)
 		if m.ready && m.followMode {
 			m.viewport.SetContent(m.renderOutputContent())
@@ -164,6 +176,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.inLookahead = m.inCoverage && m.remainingSec <= m.profile.Schedule.LookaheadSec
 		}
 		return m, tickCmd()
+
+	case ReplayProgressMsg:
+		m.replayElapsed = msg.Elapsed
+		m.replayTotal = msg.Total
+
+	case ReplayDoneMsg:
+		m.replayDone = true
+		m.replayErr = msg.Err
+		m.output.Write("")
+		if msg.Err != nil {
+			m.output.Write("── replay failed: " + msg.Err.Error() + " ──")
+		} else {
+			m.output.Write("── replay complete ──")
+		}
+		if m.ready && m.followMode {
+			m.viewport.SetContent(m.renderOutputContent())
+			m.viewport.GotoBottom()
+		}
 	}
 
 	return m, nil
