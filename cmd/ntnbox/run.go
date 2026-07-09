@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/hyavari/ntn-in-a-box/internal/cli"
-	"github.com/hyavari/ntn-in-a-box/internal/kernel/apihost"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/condition"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/device"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/driver"
@@ -21,6 +20,7 @@ import (
 	"github.com/hyavari/ntn-in-a-box/internal/module/devsandbox"
 	"github.com/hyavari/ntn-in-a-box/internal/module/devsandbox/netem"
 	"github.com/hyavari/ntn-in-a-box/internal/module/devsandbox/netns"
+	ntnrecorder "github.com/hyavari/ntn-in-a-box/internal/recorder"
 	ntntui "github.com/hyavari/ntn-in-a-box/internal/tui"
 )
 
@@ -44,6 +44,7 @@ func runRun(args []string) error {
 	profilePath := fs.String("profile", "", "Path to a YAML profile file (required)")
 	addr := fs.String("addr", "", "Optionally expose the API host (host:port)")
 	tuiFlag := fs.Bool("tui", false, "Show a live TUI dashboard instead of scrolling output")
+	recordPath := fs.String("record", "", "Record bus events to a JSONL file")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -122,21 +123,22 @@ func runRun(args []string) error {
 	bus.SubscribeCoverage(sandbox.OnCoverageEvent)
 	bus.SubscribeLinkState(sandbox.OnLinkState)
 
+	// Optionally record bus events.
+	if *recordPath != "" {
+		rec, err := ntnrecorder.New(*recordPath, eval)
+		if err != nil {
+			return fmt.Errorf("creating recorder: %w", err)
+		}
+		defer rec.Close()
+		bus.SubscribeCoverage(rec.OnCoverage)
+		bus.SubscribeLinkState(rec.OnLinkState)
+		fmt.Fprintf(os.Stderr, "ntnbox: recording to %s\n", *recordPath)
+	}
+
 	// Optionally start the API host.
 	if *addr != "" {
-		srv := apihost.New(apihost.Config{
-			Profiles:  []*profile.Profile{p},
-			Registry:  registry,
-			Bus:       bus,
-			Evaluator: eval,
-		})
-		srv.RegisterEvaluator(dev.ID, eval)
+		srv := startAPIHost(*addr, bus, registry, eval, p)
 		sandbox.RegisterRoutes(srv)
-		go func() {
-			fmt.Fprintf(os.Stderr, "ntnbox: API listening on %s\n", *addr)
-			fmt.Fprintf(os.Stderr, "ntnbox: GUI available at http://localhost:%s/ui\n", addrPort(*addr))
-			_ = srv.ListenAndServe(*addr)
-		}()
 	}
 
 	// Start driver loop.

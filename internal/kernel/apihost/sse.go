@@ -52,29 +52,21 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	unsubCoverage := s.bus.SubscribeCoverage(func(ev eventbus.CoverageEvent) {
 		payload := sseCoverageEvent{
 			Kind:                string(ev.Kind),
-			InCoverage:          ev.Kind == eventbus.KindWindowOpened || ev.Kind == eventbus.KindWindowOpening,
-			ElapsedSec:          0,
-			UntilNextTransition: 0,
+			InCoverage:          ev.InCoverage,
+			ElapsedSec:          ev.ElapsedSec,
+			UntilNextTransition: ev.UntilNextTransition,
 			At:                  ev.At.Format(time.RFC3339),
 		}
 
-		// Enrich with evaluator data if available.
+		// Enrich with evaluator data if available (overrides replay values).
 		if s.eval != nil {
 			_, cov := s.eval.Evaluate(ev.At)
 			payload.InCoverage = cov.InCoverage
 			payload.ElapsedSec = cov.ElapsedSec
 			payload.UntilNextTransition = cov.UntilNextTransitionSec
-		} else {
-			// Fallback: try per-device evaluators.
-			s.mu.RLock()
-			for _, eval := range s.evaluators {
-				_, cov := eval.Evaluate(ev.At)
-				payload.InCoverage = cov.InCoverage
-				payload.ElapsedSec = cov.ElapsedSec
-				payload.UntilNextTransition = cov.UntilNextTransitionSec
-				break
-			}
-			s.mu.RUnlock()
+		} else if payload.ElapsedSec == 0 && payload.UntilNextTransition == 0 {
+			// Fallback: derive from event kind.
+			payload.InCoverage = ev.Kind == eventbus.KindWindowOpened || ev.Kind == eventbus.KindWindowOpening
 		}
 
 		data, err := json.Marshal(payload)

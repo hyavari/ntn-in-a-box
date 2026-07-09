@@ -67,8 +67,14 @@ function connect() {
     es.addEventListener('coverage', (e) => {
         const data = JSON.parse(e.data);
         state.inCoverage = data.in_coverage;
-        state.elapsedSec = data.elapsed_sec;
-        state.untilNext = data.until_next_transition;
+        if (data.elapsed_sec > 0 || data.until_next_transition > 0) {
+            state.elapsedSec = data.elapsed_sec;
+            state.untilNext = data.until_next_transition;
+        }
+        // Reset elapsed on new window open (replay or live).
+        if (data.kind === 'window_opened') {
+            state.elapsedSec = data.elapsed_sec || 0;
+        }
         state.hasData = true;
         hideIdle();
         updateAll();
@@ -112,8 +118,8 @@ async function fetchProfile() {
     try {
         const resp = await fetch('/profiles');
         const profiles = await resp.json();
-        if (profiles.length > 0) {
-            const name = profiles[0].name;
+        if (profiles && profiles.length > 0) {
+            const name = profiles[0].name || profiles[0].Name;
             const detailResp = await fetch(`/profiles/${name}`);
             const p = await detailResp.json();
             // Handle both capitalized (Go default) and lowercase JSON keys.
@@ -122,10 +128,9 @@ async function fetchProfile() {
             const periodSec = sched.period_sec || sched.PeriodSec || 600;
             const windowSec = sched.window_sec || sched.WindowSec || 90;
             const lookaheadSec = sched.lookahead_sec || sched.LookaheadSec || 30;
-            const profileName = p.name || p.Name || '—';
+            const profileName = p.name || p.Name || 'unknown';
 
             state.profileName = profileName;
-            state.windowSec = periodSec ? periodSec : 600;
             state.periodSec = periodSec;
             state.windowSec = windowSec;
             state.lookaheadSec = lookaheadSec;
@@ -142,6 +147,13 @@ async function fetchProfile() {
             } else {
                 els.profileSchedule.textContent = `${periodSec}s period (continuous)`;
             }
+            buildTimeline();
+        } else {
+            // Replay mode: no profiles available. Use defaults.
+            els.profileName.textContent = 'replay';
+            els.profileDetail.textContent = 'replay';
+            els.profileMode.textContent = state.mode;
+            els.profileSchedule.textContent = `${state.periodSec}s period / ${state.windowSec}s window`;
             buildTimeline();
         }
     } catch (e) {
@@ -360,9 +372,9 @@ setInterval(() => {
     if (!state.hasData) return;
     if (state.untilNext > 0) {
         state.untilNext -= 1;
-        if (state.inCoverage) {
-            state.elapsedSec += 1;
-        }
+    }
+    if (state.inCoverage) {
+        state.elapsedSec += 1;
     }
     updateCoverageStatus();
     updateAnimation();

@@ -28,16 +28,26 @@ func NewAdapter(sender Sender, eval *condition.Evaluator) *Adapter {
 }
 
 // OnCoverage is a CoverageHandler that enriches the event with
-// evaluator state and sends a CoverageMsg.
+// evaluator state (if available) and sends a CoverageMsg.
 func (a *Adapter) OnCoverage(ev eventbus.CoverageEvent) {
-	_, cov := a.eval.Evaluate(ev.At)
-	a.sender.Send(CoverageMsg{
+	msg := CoverageMsg{
 		Kind:                ev.Kind,
-		InCoverage:          cov.InCoverage,
-		ElapsedSec:          cov.ElapsedSec,
-		UntilNextTransition: cov.UntilNextTransitionSec,
+		InCoverage:          ev.InCoverage,
+		ElapsedSec:          ev.ElapsedSec,
+		UntilNextTransition: ev.UntilNextTransition,
 		At:                  ev.At,
-	})
+	}
+	// Enrich with evaluator data when available (overrides replay values).
+	if a.eval != nil {
+		_, cov := a.eval.Evaluate(ev.At)
+		msg.InCoverage = cov.InCoverage
+		msg.ElapsedSec = cov.ElapsedSec
+		msg.UntilNextTransition = cov.UntilNextTransitionSec
+	} else if msg.ElapsedSec == 0 && msg.UntilNextTransition == 0 {
+		// Fallback: derive InCoverage from event kind.
+		msg.InCoverage = ev.Kind == eventbus.KindWindowOpened || ev.Kind == eventbus.KindWindowOpening
+	}
+	a.sender.Send(msg)
 }
 
 // OnLinkState is a LinkStateHandler that sends a LinkStateMsg.

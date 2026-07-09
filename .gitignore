@@ -26,3 +26,7 @@ vendor/
 .idea/
 .vscode/
 .superpowers/
+
+
+# Session recordings
+*.jsonl

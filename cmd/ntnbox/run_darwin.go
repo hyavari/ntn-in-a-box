@@ -101,6 +101,22 @@ func runViaDarwinDocker(args []string) error {
 		}
 		containerCmd = append(containerCmd, "--addr", "0.0.0.0:"+port)
 	}
+	if parsed.record != "" {
+		absRecord, err := filepath.Abs(parsed.record)
+		if err != nil {
+			return fmt.Errorf("resolving record path: %w", err)
+		}
+		// Create the file only if it doesn't exist (don't truncate).
+		if _, err := os.Stat(absRecord); os.IsNotExist(err) {
+			f, err := os.Create(absRecord)
+			if err != nil {
+				return fmt.Errorf("creating record file: %w", err)
+			}
+			f.Close()
+		}
+		dockerArgs = append(dockerArgs, "-v", absRecord+":/tmp/recording.jsonl")
+		containerCmd = append(containerCmd, "--record", "/tmp/recording.jsonl")
+	}
 	containerCmd = append(containerCmd, "--")
 	containerCmd = append(containerCmd, cmdArgs...)
 
@@ -142,6 +158,7 @@ type darwinParsed struct {
 	profilePath string
 	tui         bool
 	addr        string
+	record      string
 	cmdArgs     []string
 }
 
@@ -158,6 +175,9 @@ func parseDarwinArgs(args []string) (darwinParsed, error) {
 			p.profilePath = args[i][10:]
 		case args[i] == "--tui":
 			p.tui = true
+		case args[i] == "--record" && i+1 < len(args):
+			p.record = args[i+1]
+			i++
 		case args[i] == "--addr" && i+1 < len(args):
 			p.addr = args[i+1]
 			i++

@@ -6,6 +6,8 @@
 #   ./scripts/demo.sh --tui                        # with TUI dashboard
 #   ./scripts/demo.sh --sample curl-demo           # run curl demo sample
 #   ./scripts/demo.sh --sample go-messenger        # run Go messenger client
+#   ./scripts/demo.sh --record session.jsonl       # record bus events
+#   ./scripts/demo.sh --replay session.jsonl       # replay a recorded session
 #   ./scripts/demo.sh geo_steady                   # use a different profile
 #   ./scripts/demo.sh --tui --sample go-messenger  # TUI + sample
 #   ./scripts/demo.sh leo_pass_90s curl https://example.com  # custom command
@@ -31,6 +33,8 @@ set -euo pipefail
 # Parse flags.
 TUI_FLAG=""
 SAMPLE=""
+RECORD_FILE=""
+REPLAY_FILE=""
 
 while [[ "${1:-}" == --* ]]; do
   case "$1" in
@@ -47,6 +51,22 @@ while [[ "${1:-}" == --* ]]; do
       SAMPLE="$2"
       shift 2
       ;;
+    --record)
+      if [[ -z "${2:-}" || "${2:-}" == --* ]]; then
+        echo "error: --record requires a filename" >&2
+        exit 1
+      fi
+      RECORD_FILE="$2"
+      shift 2
+      ;;
+    --replay)
+      if [[ -z "${2:-}" || "${2:-}" == --* ]]; then
+        echo "error: --replay requires a filename" >&2
+        exit 1
+      fi
+      REPLAY_FILE="$2"
+      shift 2
+      ;;
     *)
       break
       ;;
@@ -55,6 +75,47 @@ done
 
 PROFILE="${1:-leo_pass_90s}"
 shift 2>/dev/null || true
+
+# Cannot use --record and --replay together.
+if [[ -n "$RECORD_FILE" && -n "$REPLAY_FILE" ]]; then
+  echo "error: --record and --replay cannot be used together" >&2
+  exit 1
+fi
+
+# Replay mode short-circuits before profile check.
+if [[ -n "$REPLAY_FILE" ]]; then
+  if [[ ! -f "$REPLAY_FILE" ]]; then
+    echo "error: recording file not found: $REPLAY_FILE" >&2
+    exit 1
+  fi
+  CMD=("${@:-poller --url https://example.com --interval 2s}")
+  if [[ $# -eq 0 ]]; then
+    CMD=(poller --url https://example.com --interval 2s)
+  fi
+
+  cleanup() {
+    echo ""
+    echo "cleaning up..."
+    docker ps -q --filter "ancestor=ntnbox:latest" | while read -r cid; do docker stop "$cid" 2>/dev/null; done || true
+    rm -f ntnbox poller messenger-client
+    if [[ "${PRUNE:-}" == "1" ]]; then docker rmi ntnbox:latest 2>/dev/null || true; fi
+    echo "done."
+  }
+  trap cleanup EXIT
+
+  echo "==> building ntnbox + poller..."
+  go build -o ntnbox ./cmd/ntnbox/
+  go build -o poller ./cmd/poller/
+
+  echo "==> building docker image..."
+  docker build -t ntnbox:latest . -q
+
+  echo "==> replaying: ntnbox replay ${TUI_FLAG} --file $REPLAY_FILE -- ${CMD[*]}"
+  echo "    GUI available at: http://localhost:8080/ui"
+  echo ""
+  ./ntnbox replay ${TUI_FLAG} --file "$REPLAY_FILE" --addr :8080 -- "${CMD[@]}"
+  exit $?
+fi
 
 PROFILE_PATH="testdata/profiles/${PROFILE}.yaml"
 if [[ ! -f "$PROFILE_PATH" ]]; then
@@ -123,8 +184,16 @@ fi
 echo "==> building docker image..."
 docker build -t ntnbox:latest . -q
 
-echo "==> running: ntnbox run ${TUI_FLAG} --addr :8080 --profile $PROFILE_PATH -- ${CMD[*]}"
+RECORD_ARGS=()
+if [[ -n "$RECORD_FILE" ]]; then
+  RECORD_ARGS=(--record "$RECORD_FILE")
+fi
+
+echo "==> running: ntnbox run ${TUI_FLAG} ${RECORD_ARGS[*]} --addr :8080 --profile $PROFILE_PATH -- ${CMD[*]}"
 echo "    GUI available at: http://localhost:8080/ui"
+if [[ -n "$RECORD_FILE" ]]; then
+  echo "    Recording to: $RECORD_FILE"
+fi
 echo ""
 
-./ntnbox run ${TUI_FLAG} --addr :8080 --profile "$PROFILE_PATH" -- "${CMD[@]}"
+./ntnbox run ${TUI_FLAG} "${RECORD_ARGS[@]}" --addr :8080 --profile "$PROFILE_PATH" -- "${CMD[@]}"

@@ -84,6 +84,9 @@ A convenience script that builds everything, runs a demo, and cleans up:
 ./scripts/demo.sh --sample curl-demo           # curl polling demo
 ./scripts/demo.sh --sample go-messenger        # Go messenger with queue/flush
 ./scripts/demo.sh --tui --sample go-messenger  # TUI + sample
+./scripts/demo.sh --record session.jsonl       # record bus events to file
+./scripts/demo.sh --replay session.jsonl       # replay a recorded session
+./scripts/demo.sh --tui --replay session.jsonl # replay with TUI dashboard
 ./scripts/demo.sh geo_steady                   # different profile
 ./scripts/demo.sh d2c_burst curl https://example.com  # custom command
 PRUNE=1 ./scripts/demo.sh                     # also remove docker image on exit

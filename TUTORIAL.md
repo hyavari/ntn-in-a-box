@@ -173,7 +173,40 @@ No code changes needed — ntnbox shapes the network transparently
 at the OS level. Your app sees real delays, real packet loss, and
 real connectivity gaps.
 
-## Step 9: Query the API
+## Step 9: Record and replay sessions
+
+You can record a session to a JSONL file and replay it later — useful
+for reproducing bugs or running the same conditions in CI:
+
+```bash
+# Record a session to a file:
+./scripts/demo.sh --record session.jsonl
+
+# Replay it later (no profile needed):
+./scripts/demo.sh --replay session.jsonl
+
+# Replay with TUI dashboard:
+./scripts/demo.sh --tui --replay session.jsonl
+
+# Replay at 10x speed (great for CI):
+./ntnbox replay --file session.jsonl --speed 10 -- ./my-app
+```
+
+The recording captures every coverage transition and link-state update
+as timestamped JSONL events. Replay reproduces them with exact timing.
+The file is human-readable and can be stored alongside your test suite
+for regression testing (add an exception to `.gitignore` or use a
+dedicated directory like `testdata/sessions/`).
+
+**Example session.jsonl:**
+```jsonl
+{"type":"coverage","kind":"window_opened","at":"2026-07-08T10:00:00Z","in_coverage":true,"elapsed_sec":0,"until_next_transition":90}
+{"type":"linkstate","delay_ms":150,"jitter_ms":40,"loss_pct":10,"bandwidth_kbps":2000,"at":"2026-07-08T10:00:00.25Z"}
+{"type":"linkstate","delay_ms":43,"jitter_ms":5,"loss_pct":0.2,"bandwidth_kbps":20000,"at":"2026-07-08T10:00:00.5Z"}
+{"type":"coverage","kind":"window_closed","at":"2026-07-08T10:01:30Z","in_coverage":false,"elapsed_sec":0,"until_next_transition":510}
+```
+
+## Step 10: Query the API
 
 While running with `--addr`, you can query satellite state
 programmatically:
@@ -190,6 +223,10 @@ curl -N http://localhost:8080/events
 ```
 
 This lets your app adapt in real time based on satellite state.
+
+**Note:** In replay mode, the GUI and SSE stream (`/events`) work
+normally, but `/devices/{id}/condition` and `/capabilities` are not
+available (no evaluator or profile loaded).
 
 ## Patterns for NTN-aware apps
 

@@ -30,6 +30,12 @@ const (
 type CoverageEvent struct {
 	Kind CoverageEventKind
 	At   time.Time
+
+	// Optional pre-computed state (used by replay mode when no
+	// evaluator is available). Zero values mean "not provided."
+	InCoverage          bool
+	ElapsedSec          float64
+	UntilNextTransition float64
 }
 
 // LinkStateEvent carries a snapshot of link impairment values.

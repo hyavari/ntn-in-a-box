@@ -3,6 +3,7 @@
 // Subcommands:
 //   - serve: starts the kernel API server with a given profile
 //   - run: wraps a process in a shaped network namespace (Dev Sandbox)
+//   - replay: replays a recorded JSONL session with original timing
 package main
 
 import (
@@ -30,7 +31,7 @@ func main() {
 func run(args []string) error {
 	// Top-level: expect a subcommand.
 	if len(args) == 0 {
-		return errors.New("usage: ntnbox <command> [flags]\n\nCommands:\n  serve    Start the kernel API server\n  run      Run a command under simulated NTN conditions")
+		return errors.New("usage: ntnbox <command> [flags]\n\nCommands:\n  serve    Start the kernel API server\n  run      Run a command under simulated NTN conditions\n  replay   Replay a recorded session")
 	}
 
 	switch args[0] {
@@ -38,8 +39,10 @@ func run(args []string) error {
 		return runServe(args[1:])
 	case "run":
 		return runRun(args[1:])
+	case "replay":
+		return runReplay(args[1:])
 	default:
-		return fmt.Errorf("unknown command: %s\n\nCommands:\n  serve    Start the kernel API server\n  run      Run a command under simulated NTN conditions", args[0])
+		return fmt.Errorf("unknown command: %s\n\nCommands:\n  serve    Start the kernel API server\n  run      Run a command under simulated NTN conditions\n  replay   Replay a recorded session", args[0])
 	}
 }
 
