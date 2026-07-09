@@ -5,11 +5,15 @@ on:
       - 'action.yml'
       - 'cmd/ntnbox/**'
       - 'internal/**'
+      - 'testdata/**'
+      - '.github/workflows/ntn-action-smoke.yml'
   pull_request:
     paths:
       - 'action.yml'
       - 'cmd/ntnbox/**'
       - 'internal/**'
+      - 'testdata/**'
+      - '.github/workflows/ntn-action-smoke.yml'
 
 jobs:
   smoke:
@@ -20,6 +24,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26'
+
+      # Pre-build ntnbox so the action steps don't each rebuild.
+      - name: Pre-build ntnbox
+        run: |
+          go build -o /tmp/ntnbox ./cmd/ntnbox/
+          sudo cp /tmp/ntnbox /usr/local/bin/ntnbox
 
       - name: Test with built-in profile
         uses: ./

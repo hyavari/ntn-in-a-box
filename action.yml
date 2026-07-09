@@ -16,18 +16,15 @@ inputs:
     default: '1'
   record:
     description: 'Path to save a recording of this session'
-  version:
-    description: 'NTN-in-a-Box version to install (git ref)'
-    default: 'master'
 runs:
   using: 'composite'
   steps:
     - name: Install ntnbox
       shell: bash
       run: |
-        # Install iproute2 if tc is not available (needed for netem).
-        if ! command -v tc &>/dev/null; then
-          sudo apt-get update -qq && sudo apt-get install -y -qq iproute2 >/dev/null
+        # Install iproute2 and iptables if not available.
+        if ! command -v tc &>/dev/null || ! command -v iptables &>/dev/null; then
+          sudo apt-get update -qq && sudo apt-get install -y -qq iproute2 iptables >/dev/null
         fi
         # Build ntnbox from source.
         cd "$GITHUB_ACTION_PATH"
@@ -43,9 +40,8 @@ runs:
         INPUT_SPEED: ${{ inputs.speed }}
         INPUT_RECORD: ${{ inputs.record }}
       run: |
-        # Resolve profile path.
         if [ -n "$INPUT_REPLAY" ]; then
-          exec sudo ntnbox replay \
+          exec sudo env "PATH=$PATH" ntnbox replay \
             --file "$INPUT_REPLAY" \
             --speed "${INPUT_SPEED:-1}" \
             -- sh -c "$INPUT_COMMAND"
@@ -73,4 +69,4 @@ runs:
           args+=(--record "$INPUT_RECORD")
         fi
 
-        exec sudo ntnbox run "${args[@]}" -- sh -c "$INPUT_COMMAND"
+        exec sudo env "PATH=$PATH" ntnbox run "${args[@]}" -- sh -c "$INPUT_COMMAND"

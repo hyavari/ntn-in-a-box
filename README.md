@@ -225,7 +225,6 @@ host.
 | `replay` | No* | — | Path to a JSONL recording (overrides `profile`) |
 | `speed` | No | `1` | Replay speed multiplier |
 | `record` | No | — | Path to save a recording of this session |
-| `version` | No | `master` | Git ref to build from |
 
 *Either `profile` or `replay` is required.
 
