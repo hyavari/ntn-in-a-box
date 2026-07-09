@@ -1,0 +1,21 @@
+name: 'NTN-in-a-Box'
+description: 'Run commands under simulated satellite network conditions'
+branding:
+  icon: 'radio'
+  color: 'blue'
+inputs:
+  profile:
+    description: 'Profile name (e.g. leo_pass_90s) or path to a YAML file'
+  command:
+    description: 'Command to run under NTN conditions'
+    required: true
+  replay:
+    description: 'Path to a JSONL recording to replay instead of using a profile'
+  speed:
+    description: 'Replay speed multiplier'
+    default: '1'
+  record:
+    description: 'Path to save a recording of this session'
+runs:
+  using: 'docker'
+  image: 'Dockerfile.action'

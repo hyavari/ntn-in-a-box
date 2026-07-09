@@ -199,6 +199,56 @@ No code changes needed in your app — ntnbox shapes the network
 transparently at the OS level. See [TUTORIAL.md](TUTORIAL.md) for a
 step-by-step walkthrough.
 
+## GitHub Action
+
+Run your CI tests under simulated NTN conditions with a single step:
+
+```yaml
+- uses: hyavari/ntn-in-a-box@v1
+  with:
+    profile: leo_pass_90s
+    command: npm test
+```
+
+### Inputs
+
+| Input | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `profile` | Yes* | — | Profile name (`leo_pass_90s`, `geo_steady`, `d2c_burst`) or path to YAML |
+| `command` | Yes | — | Command to run under NTN conditions |
+| `replay` | No* | — | Path to a JSONL recording (overrides `profile`) |
+| `speed` | No | `1` | Replay speed multiplier |
+| `record` | No | — | Path to save a recording of this session |
+
+*Either `profile` or `replay` is required.
+
+### Examples
+
+```yaml
+# Replay a recorded session at 10x speed for regression testing:
+- uses: hyavari/ntn-in-a-box@v1
+  with:
+    replay: testdata/sessions/regression.jsonl
+    speed: '10'
+    command: go test ./...
+
+# Record a session for later replay:
+- uses: hyavari/ntn-in-a-box@v1
+  with:
+    profile: leo_pass_90s
+    record: testdata/sessions/new.jsonl
+    command: ./my-app --smoke-test
+
+# Use a custom profile from the repo:
+- uses: hyavari/ntn-in-a-box@v1
+  with:
+    profile: testdata/profiles/my_custom.yaml
+    command: python3 test_client.py
+```
+
+The action exit code matches the wrapped command — your CI sees test
+pass/fail directly.
+
 ## Architecture
 
 One platform, three capabilities, on a shared kernel:

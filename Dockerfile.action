@@ -1,0 +1,22 @@
+# GitHub Action image — minimal build for CI.
+# Separate from the dev Dockerfile to keep the action lean.
+
+FROM golang:1.26-alpine AS builder
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+
+RUN CGO_ENABLED=0 go build -o /out/ntnbox ./cmd/ntnbox/
+
+FROM alpine:3.20
+
+RUN apk add --no-cache iproute2 iptables
+
+COPY --from=builder /out/ntnbox /usr/local/bin/ntnbox
+COPY testdata/profiles/ /profiles/
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
