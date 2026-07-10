@@ -28,16 +28,10 @@ func runViaDarwinDocker(args []string) error {
 			"Install Docker Desktop: https://www.docker.com/products/docker-desktop/")
 	}
 
-	// Parse the args to find --profile, --tui, --addr, and the command after --.
+	// Parse the args to find --profile, --tle, --tui, --addr, and the command after --.
 	parsed, err := parseDarwinArgs(args)
 	if err != nil {
 		return err
-	}
-
-	// Resolve profile to absolute path for bind-mounting.
-	absProfile, err := filepath.Abs(parsed.profilePath)
-	if err != nil {
-		return fmt.Errorf("resolving profile path: %w", err)
 	}
 
 	// Build docker run arguments.
@@ -45,7 +39,47 @@ func runViaDarwinDocker(args []string) error {
 		"run", "--rm",
 		"--privileged",
 		"--cap-add", "NET_ADMIN",
-		"-v", absProfile + ":/tmp/profile.yaml:ro",
+	}
+
+	// Bind-mount profile or TLE file.
+	var containerCmd []string
+	if parsed.profilePath != "" {
+		absProfile, err := filepath.Abs(parsed.profilePath)
+		if err != nil {
+			return fmt.Errorf("resolving profile path: %w", err)
+		}
+		dockerArgs = append(dockerArgs, "-v", absProfile+":/tmp/profile.yaml:ro")
+		containerCmd = []string{"run", "--profile", "/tmp/profile.yaml"}
+	} else {
+		absTLE, err := filepath.Abs(parsed.tlePath)
+		if err != nil {
+			return fmt.Errorf("resolving TLE path: %w", err)
+		}
+		dockerArgs = append(dockerArgs, "-v", absTLE+":/tmp/input.tle:ro")
+		containerCmd = []string{"run", "--tle", "/tmp/input.tle"}
+		// Pass through extra args, rewriting --link-model path if present.
+		for i := 0; i < len(parsed.extraArgs); i++ {
+			arg := parsed.extraArgs[i]
+			if arg == "--link-model" && i+1 < len(parsed.extraArgs) {
+				absModel, err := filepath.Abs(parsed.extraArgs[i+1])
+				if err != nil {
+					return fmt.Errorf("resolving link-model path: %w", err)
+				}
+				dockerArgs = append(dockerArgs, "-v", absModel+":/tmp/linkmodel.yaml:ro")
+				containerCmd = append(containerCmd, "--link-model", "/tmp/linkmodel.yaml")
+				i++ // skip the value
+			} else if len(arg) > 13 && arg[:13] == "--link-model=" {
+				modelPath := arg[13:]
+				absModel, err := filepath.Abs(modelPath)
+				if err != nil {
+					return fmt.Errorf("resolving link-model path: %w", err)
+				}
+				dockerArgs = append(dockerArgs, "-v", absModel+":/tmp/linkmodel.yaml:ro")
+				containerCmd = append(containerCmd, "--link-model", "/tmp/linkmodel.yaml")
+			} else {
+				containerCmd = append(containerCmd, arg)
+			}
+		}
 	}
 
 	// Publish the API port if --addr is set.
@@ -86,7 +120,6 @@ func runViaDarwinDocker(args []string) error {
 	}
 
 	// Build the ntnbox run command for inside the container.
-	containerCmd := []string{"run", "--profile", "/tmp/profile.yaml"}
 	if parsed.tui {
 		containerCmd = append(containerCmd, "--tui")
 	}
@@ -156,13 +189,15 @@ func runViaDarwinDocker(args []string) error {
 // darwinParsed holds the parsed flags from the run command args.
 type darwinParsed struct {
 	profilePath string
+	tlePath     string
 	tui         bool
 	addr        string
 	record      string
 	cmdArgs     []string
+	extraArgs   []string // All other flags to pass through (TLE flags, etc.)
 }
 
-// parseDarwinArgs extracts --profile, --tui, --addr values and the
+// parseDarwinArgs extracts --profile, --tle, --tui, --addr values and the
 // command after "--" from the original args slice.
 func parseDarwinArgs(args []string) (darwinParsed, error) {
 	var p darwinParsed
@@ -173,6 +208,11 @@ func parseDarwinArgs(args []string) (darwinParsed, error) {
 			i++
 		case len(args[i]) > 10 && args[i][:10] == "--profile=":
 			p.profilePath = args[i][10:]
+		case args[i] == "--tle" && i+1 < len(args):
+			p.tlePath = args[i+1]
+			i++
+		case len(args[i]) > 6 && args[i][:6] == "--tle=":
+			p.tlePath = args[i][6:]
 		case args[i] == "--tui":
 			p.tui = true
 		case args[i] == "--record" && i+1 < len(args):
@@ -185,18 +225,27 @@ func parseDarwinArgs(args []string) (darwinParsed, error) {
 			p.addr = args[i][7:]
 		case args[i] == "--":
 			p.cmdArgs = args[i+1:]
-			if p.profilePath == "" {
-				return p, errors.New("--profile is required")
+			if p.profilePath == "" && p.tlePath == "" {
+				return p, errors.New("--profile or --tle is required")
+			}
+			if p.profilePath != "" && p.tlePath != "" {
+				return p, errors.New("flags --tle and --profile are mutually exclusive")
 			}
 			if len(p.cmdArgs) == 0 {
 				return p, errors.New("no command specified after --")
 			}
 			return p, nil
+		default:
+			// Collect other flags to pass through to the container.
+			p.extraArgs = append(p.extraArgs, args[i])
 		}
 	}
 
-	if p.profilePath == "" {
-		return p, errors.New("--profile is required\n\nUsage: ntnbox run --profile <path> [--addr <host:port>] [--tui] -- <cmd> [args...]")
+	if p.profilePath == "" && p.tlePath == "" {
+		return p, errors.New("--profile or --tle is required\n\nUsage: ntnbox run --profile <path> -- <cmd> [args...]\n       ntnbox run --tle <path> --lat <deg> --lon <deg> -- <cmd> [args...]")
 	}
-	return p, errors.New("no command specified after --\n\nUsage: ntnbox run --profile <path> [--addr <host:port>] [--tui] -- <cmd> [args...]")
+	if p.profilePath != "" && p.tlePath != "" {
+		return p, errors.New("flags --tle and --profile are mutually exclusive")
+	}
+	return p, errors.New("no command specified after --\n\nUsage: ntnbox run --profile <path> -- <cmd> [args...]\n       ntnbox run --tle <path> --lat <deg> --lon <deg> -- <cmd> [args...]")
 }

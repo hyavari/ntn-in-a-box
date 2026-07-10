@@ -17,13 +17,13 @@ type Sender interface {
 // events as typed tea.Msg values via Send().
 type Adapter struct {
 	sender Sender
-	eval   *condition.Evaluator
+	eval   condition.Eval
 }
 
 // NewAdapter creates an Adapter that sends messages to sender. The
 // evaluator enriches coverage events with computed state (percentage,
 // countdown).
-func NewAdapter(sender Sender, eval *condition.Evaluator) *Adapter {
+func NewAdapter(sender Sender, eval condition.Eval) *Adapter {
 	return &Adapter{sender: sender, eval: eval}
 }
 

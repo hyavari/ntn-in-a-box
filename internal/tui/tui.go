@@ -20,7 +20,7 @@ var ErrReplayAgain = errors.New("replay again requested")
 // Config holds the dependencies for running the TUI.
 type Config struct {
 	Bus       *eventbus.Bus
-	Evaluator *condition.Evaluator
+	Evaluator condition.Eval
 	Profile   *profile.Profile
 	CmdFn     func() *exec.Cmd // returns the prepared command (e.g. ns.Command)
 	Addr      string           // API host address (for displaying GUI URL)

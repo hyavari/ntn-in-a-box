@@ -15,7 +15,7 @@ const DefaultInterval = 250 * time.Millisecond
 // Config holds the driver loop's dependencies.
 type Config struct {
 	// Evaluator computes coverage + link state at any instant.
-	Evaluator *condition.Evaluator
+	Evaluator condition.Eval
 
 	// Bus publishes events to subscribers.
 	Bus *eventbus.Bus
@@ -45,7 +45,8 @@ type Config struct {
 // evaluates the Condition Engine, and publishes events to the bus.
 // Safe to run from a single goroutine (not internally concurrent).
 type Loop struct {
-	eval         *condition.Evaluator
+	eval         condition.Eval
+	advancer     condition.Advancer // nil if eval doesn't implement Advancer
 	bus          *eventbus.Bus
 	lookaheadSec float64
 	tickCh       <-chan time.Time
@@ -69,8 +70,13 @@ func New(cfg Config) *Loop {
 	if nowFn == nil {
 		nowFn = time.Now
 	}
+	var adv condition.Advancer
+	if a, ok := cfg.Evaluator.(condition.Advancer); ok {
+		adv = a
+	}
 	return &Loop{
 		eval:         cfg.Evaluator,
+		advancer:     adv,
 		bus:          cfg.Bus,
 		lookaheadSec: cfg.LookaheadSec,
 		tickCh:       cfg.TickCh,
@@ -107,6 +113,12 @@ func (l *Loop) Run(ctx context.Context) {
 
 func (l *Loop) tick() {
 	now := l.now()
+
+	// Advance simulation time if the evaluator supports it.
+	if l.advancer != nil {
+		l.advancer.Advance(now)
+	}
+
 	link, cov := l.eval.Evaluate(now)
 
 	// Detect coverage transitions.

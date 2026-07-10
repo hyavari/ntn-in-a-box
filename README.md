@@ -95,6 +95,37 @@ PRUNE=1 ./scripts/demo.sh                     # also remove docker image on exit
 The GUI is always available at `http://localhost:8080/ui` when using
 the demo script.
 
+### TLE Support (real satellite orbits)
+
+Generate profiles from Two-Line Element orbital data, or drive a live
+simulation from predicted passes. On macOS, `--tle` is bind-mounted
+the same way as `--profile`.
+
+```bash
+# Offline: generate a YAML profile from ISS orbital data
+./ntnbox tle generate \
+  --file testdata/tle/iss.tle \
+  --lat 37.7749 --lon -122.4194 \
+  --output iss-pass.yaml
+
+# Live: predict passes and simulate them in sequence
+sudo ./ntnbox run \
+  --tle testdata/tle/iss.tle \
+  --lat 37.7749 --lon -122.4194 \
+  --start-at next-pass --speed 10 \
+  -- ./poller
+
+# Works with --tui, --record, and --addr (GUI)
+sudo ./ntnbox run --tui --addr :8080 \
+  --tle testdata/tle/iss.tle \
+  --lat 37.7749 --lon -122.4194 \
+  --start-at next-pass \
+  -- ./poller
+```
+
+See [TLE reference](#tle-reference) for flags, custom link models, and
+`./scripts/demo-tle.sh`.
+
 ### TUI Dashboard
 
 <img src="docs/images/tui.png" alt="TUI Dashboard" width="800">
@@ -165,6 +196,87 @@ curl -X POST http://localhost:8080/devices \
 curl http://localhost:8080/devices/ue-1/condition
 # {"in_coverage":true,"elapsed_sec":2.3,"until_next_transition_sec":87.7,
 #  "delay_ms":135.6,"jitter_ms":28.3,"loss_pct":7.1,"bandwidth_kbps":4400}
+```
+
+## TLE reference
+
+Flags, link models, and the TLE demo script. For a short walkthrough, see
+[TLE Support](#tle-support-real-satellite-orbits) in Quick start.
+
+### `ntnbox tle generate`
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `--file` | Yes | — | Path to TLE file |
+| `--lat` | Yes | — | Observer latitude (degrees, north +) |
+| `--lon` | Yes | — | Observer longitude (degrees, east +) |
+| `--alt` | No | 0 | Observer altitude (km) |
+| `--output` | Yes | — | Output YAML file or directory |
+| `--passes` | No | 1 | Number of passes to generate |
+| `--link-model` | No | built-in | Custom link model YAML |
+| `--elev-min` | No | 10 | Minimum elevation (degrees) |
+| `--sat` | No | first | Select satellite by name or NORAD ID |
+| `--start` | No | now | Prediction start time (RFC3339) |
+
+```bash
+# Multiple passes → writes pass_001.yaml, pass_002.yaml, … into a directory
+./ntnbox tle generate \
+  --file testdata/tle/iss.tle \
+  --lat 37.7749 --lon -122.4194 \
+  --passes 5 --output passes/
+```
+
+### `ntnbox run --tle`
+
+| Flag | Required | Default | Description |
+|------|----------|---------|-------------|
+| `--tle` | Yes* | — | Path to TLE file (mutually exclusive with `--profile`) |
+| `--lat` | Yes | — | Observer latitude |
+| `--lon` | Yes | — | Observer longitude |
+| `--alt` | No | 0 | Observer altitude (km) |
+| `--link-model` | No | built-in | Custom link model YAML |
+| `--elev-min` | No | 10 | Minimum elevation (degrees) |
+| `--sat` | No | first | Satellite selector |
+| `--start-at` | No | `next-pass` | `next-pass` (≈30s before next rise) or RFC3339 |
+| `--speed` | No | 1.0 | Gap time acceleration factor |
+| `--passes` | No | 10 | Passes to pre-compute |
+
+*`--tle` and `--profile` are mutually exclusive; one is required.
+
+### Custom link models
+
+The default link model maps elevation angle to impairment values based
+on published LEO broadband measurements. Override it with a YAML file:
+
+```yaml
+name: my_constellation
+min_elev_deg: 5
+delay_ms:
+  - { elev_deg: 5, value: 200 }
+  - { elev_deg: 45, value: 30 }
+  - { elev_deg: 90, value: 20 }
+jitter_ms:
+  - { elev_deg: 5, value: 50 }
+  - { elev_deg: 45, value: 8 }
+  - { elev_deg: 90, value: 3 }
+loss_pct:
+  - { elev_deg: 5, value: 15 }
+  - { elev_deg: 45, value: 0.5 }
+  - { elev_deg: 90, value: 0.1 }
+bandwidth_kbps:
+  - { elev_deg: 5, value: 1000 }
+  - { elev_deg: 45, value: 50000 }
+  - { elev_deg: 90, value: 100000 }
+```
+
+### TLE demo script
+
+```bash
+./scripts/demo-tle.sh                          # ISS from San Francisco
+./scripts/demo-tle.sh --generate-only          # just generate profiles
+./scripts/demo-tle.sh --tui --speed 10         # TUI + gap acceleration
+./scripts/demo-tle.sh --lat 51.5074 --lon -0.1278  # London observer
+./scripts/demo-tle.sh --tle testdata/tle/starlink-single.tle  # Starlink
 ```
 
 ## Sample applications
@@ -309,7 +421,7 @@ profile.yaml → profile.LoadFile() → Profile (static)
                       condition.NewEvaluator(profile, epoch)
                                         │
                                         ▼
-                                    Evaluator
+                                    Evaluator ─── condition.Eval interface
                                         │
                driver.Loop ticks 250ms, calls Evaluate(now)
                                         │
@@ -326,6 +438,29 @@ profile.yaml → profile.LoadFile() → Profile (static)
       Dev Sandbox    Messaging    Service API
       (netem/tc)     (future)      (future)
 ```
+
+#### TLE path (alternative to profile.yaml)
+
+```
+satellite.tle + observer location + link model
+        │
+        ▼
+  tle.PredictPasses() → []Pass (SGP4 propagation)
+        │
+        ▼
+  tle.GenerateProfile() → []profile.Profile (one per pass)
+        │
+        ▼
+  tle.SequenceEvaluator ─── condition.Eval interface
+        │                    (same interface as Evaluator)
+        ▼
+  driver.Loop (unchanged) → eventbus → modules
+```
+
+The `SequenceEvaluator` satisfies `condition.Eval` and implements
+`condition.Advancer` for variable-rate time (1x during passes, Nx
+during gaps). The driver calls `Advance(wallNow)` each tick; all
+other consumers (SSE, TUI, recorder) call `Evaluate()` as a pure read.
 
 ### Module contract
 

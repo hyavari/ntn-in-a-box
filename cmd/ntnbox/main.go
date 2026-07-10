@@ -31,7 +31,7 @@ func main() {
 func run(args []string) error {
 	// Top-level: expect a subcommand.
 	if len(args) == 0 {
-		return errors.New("usage: ntnbox <command> [flags]\n\nCommands:\n  serve    Start the kernel API server\n  run      Run a command under simulated NTN conditions\n  replay   Replay a recorded session")
+		return errors.New("usage: ntnbox <command> [flags]\n\nCommands:\n  serve    Start the kernel API server\n  run      Run a command under simulated NTN conditions\n  replay   Replay a recorded session\n  tle      TLE utilities (generate profiles from orbital data)")
 	}
 
 	switch args[0] {
@@ -41,8 +41,10 @@ func run(args []string) error {
 		return runRun(args[1:])
 	case "replay":
 		return runReplay(args[1:])
+	case "tle":
+		return runTLE(args[1:])
 	default:
-		return fmt.Errorf("unknown command: %s\n\nCommands:\n  serve    Start the kernel API server\n  run      Run a command under simulated NTN conditions\n  replay   Replay a recorded session", args[0])
+		return fmt.Errorf("unknown command: %s\n\nCommands:\n  serve    Start the kernel API server\n  run      Run a command under simulated NTN conditions\n  replay   Replay a recorded session\n  tle      TLE utilities (generate profiles from orbital data)", args[0])
 	}
 }
 

@@ -20,19 +20,19 @@ type Server struct {
 	profiles map[string]*profile.Profile
 	registry *device.Registry
 	bus      *eventbus.Bus
-	eval     *condition.Evaluator
+	eval     condition.Eval
 
 	// Per-device evaluators, created at device registration time.
 	mu         sync.RWMutex
-	evaluators map[string]*condition.Evaluator
+	evaluators map[string]condition.Eval
 }
 
 // Config holds what the server needs to start.
 type Config struct {
 	Profiles  []*profile.Profile
 	Registry  *device.Registry
-	Bus       *eventbus.Bus        // optional; if nil, /events returns 503
-	Evaluator *condition.Evaluator // optional; used by SSE to enrich coverage events
+	Bus       *eventbus.Bus    // optional; if nil, /events returns 503
+	Evaluator condition.Eval   // optional; used by SSE to enrich coverage events
 }
 
 // New creates a Server with the given config and returns it ready to
@@ -50,7 +50,7 @@ func New(cfg Config) *Server {
 		registry:   cfg.Registry,
 		bus:        cfg.Bus,
 		eval:       cfg.Evaluator,
-		evaluators: make(map[string]*condition.Evaluator),
+		evaluators: make(map[string]condition.Eval),
 	}
 	s.registerRoutes()
 	return s
@@ -70,7 +70,7 @@ func (s *Server) Handle(pattern string, handler http.Handler) {
 // RegisterEvaluator seeds a device evaluator so that
 // GET /devices/{id}/condition works for devices registered outside
 // the HTTP API (e.g. by ntnbox run).
-func (s *Server) RegisterEvaluator(deviceID string, eval *condition.Evaluator) {
+func (s *Server) RegisterEvaluator(deviceID string, eval condition.Eval) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.evaluators[deviceID] = eval
