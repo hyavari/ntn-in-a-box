@@ -20,8 +20,8 @@ set -euo pipefail
 
 # Defaults.
 TLE_FILE="testdata/tle/iss.tle"
-LAT="37.7749"
-LON="-122.4194"
+LAT="35.6762"
+LON="139.6503"
 SPEED="1"
 TUI_FLAG=""
 GENERATE_ONLY=""

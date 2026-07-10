@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/hyavari/ntn-in-a-box/internal/cli"
+	"github.com/hyavari/ntn-in-a-box/internal/kernel/apihost"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/condition"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/device"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/driver"
@@ -80,7 +81,8 @@ func runRun(args []string) error {
 	// Build the evaluator and related state depending on mode.
 	var (
 		eval         condition.Eval
-		p            *profile.Profile // nil in TLE mode
+		seqEval      *tle.SequenceEvaluator // non-nil in TLE mode
+		p            *profile.Profile       // nil in TLE mode
 		lookaheadSec float64
 		initialState condition.LinkState
 		profileName  string
@@ -168,13 +170,16 @@ func runRun(args []string) error {
 			startAt = t
 		}
 
-		seqEval, err := tle.NewSequenceEvaluator(passes, model, tle.SequenceConfig{
+		var seqErr error
+		seqEval, seqErr = tle.NewSequenceEvaluator(passes, model, tle.SequenceConfig{
 			Speed:        *tleSpeed,
 			StartAt:      startAt,
 			LookaheadSec: 30,
+			Observer:     obs,
+			Sat:          sat,
 		})
-		if err != nil {
-			return fmt.Errorf("creating TLE evaluator: %w", err)
+		if seqErr != nil {
+			return fmt.Errorf("creating TLE evaluator: %w", seqErr)
 		}
 
 		eval = seqEval
@@ -286,7 +291,25 @@ func runRun(args []string) error {
 		if p != nil {
 			profiles = append(profiles, p)
 		}
-		srv := startAPIHost(*addr, bus, registry, eval, profiles...)
+		// Build session info for the GUI.
+		var sessInfo *apihost.SessionInfo
+		if seqEval != nil {
+			orbitPoints := tle.ComputeOrbitPoints(seqEval.SatData(), seqEval.SimTime(), 200)
+			sessInfo = &apihost.SessionInfo{
+				Mode:           "tle",
+				SatelliteName:  seqEval.SatData().Name,
+				ObserverLatDeg: seqEval.Observer().LatDeg,
+				ObserverLonDeg: seqEval.Observer().LonDeg,
+				ObserverAltKm:  seqEval.Observer().AltKm,
+				OrbitPoints:    orbitPoints,
+			}
+		} else if p != nil {
+			sessInfo = &apihost.SessionInfo{
+				Mode:        "profile",
+				ProfileName: p.Name,
+			}
+		}
+		srv := startAPIHost(*addr, bus, registry, eval, sessInfo, profiles...)
 		sandbox.RegisterRoutes(srv)
 	}
 
@@ -306,18 +329,18 @@ func runRun(args []string) error {
 		tuiProfile := p
 		if tuiProfile == nil {
 			// In TLE mode, generate a profile from the first pass for TUI display.
-			// This gives the TUI schedule/curve info to show progress and metrics.
-			seqEval := eval.(*tle.SequenceEvaluator)
-			passes := seqEval.Passes()
-			if len(passes) > 0 && tleModel != nil {
-				firstProfile, err := tle.GenerateProfile(passes[0], *tleModel, tle.GenerateOpts{
-					LookaheadSec: seqEval.LookaheadSec(),
-					GapSec:       60,
-					Index:        0,
-					SatName:      passes[0].Satellite,
-				})
-				if err == nil {
-					tuiProfile = firstProfile
+			if seqEval != nil {
+				passes := seqEval.Passes()
+				if len(passes) > 0 && tleModel != nil {
+					firstProfile, err := tle.GenerateProfile(passes[0], *tleModel, tle.GenerateOpts{
+						LookaheadSec: seqEval.LookaheadSec(),
+						GapSec:       60,
+						Index:        0,
+						SatName:      passes[0].Satellite,
+					})
+					if err == nil {
+						tuiProfile = firstProfile
+					}
 				}
 			}
 			if tuiProfile == nil {

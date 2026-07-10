@@ -16,3 +16,10 @@ type Eval interface {
 type Advancer interface {
 	Advance(wallNow time.Time)
 }
+
+// Positioner is an optional interface that an Eval may implement if it
+// can report the satellite's current geodetic position. The driver
+// publishes position events when this is available (TLE mode).
+type Positioner interface {
+	Position() (latDeg, lonDeg, altKm, elevDeg, azDeg, rangeKm float64)
+}

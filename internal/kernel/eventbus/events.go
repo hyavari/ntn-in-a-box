@@ -73,3 +73,19 @@ type LinkStateHandler func(LinkStateEvent)
 
 // ObservabilityHandler is called for every published ObservabilityEvent.
 type ObservabilityHandler func(ObservabilityEvent)
+
+// SatellitePositionEvent carries the satellite's current geodetic
+// position and look angles from the observer. Published every ~1s
+// in TLE mode only.
+type SatellitePositionEvent struct {
+	LatDeg       float64
+	LonDeg       float64
+	AltKm        float64
+	ElevationDeg float64
+	AzimuthDeg   float64
+	RangeKm      float64
+	At           time.Time
+}
+
+// SatellitePositionHandler is called for every SatellitePositionEvent.
+type SatellitePositionHandler func(SatellitePositionEvent)

@@ -13,12 +13,13 @@ import (
 
 // startAPIHost starts the API host in a goroutine and returns the
 // server so callers can register module routes.
-func startAPIHost(addr string, bus *eventbus.Bus, registry *device.Registry, eval condition.Eval, profiles ...*profile.Profile) *apihost.Server {
+func startAPIHost(addr string, bus *eventbus.Bus, registry *device.Registry, eval condition.Eval, sessInfo *apihost.SessionInfo, profiles ...*profile.Profile) *apihost.Server {
 	srv := apihost.New(apihost.Config{
-		Profiles:  profiles,
-		Registry:  registry,
-		Bus:       bus,
-		Evaluator: eval,
+		Profiles:    profiles,
+		Registry:    registry,
+		Bus:         bus,
+		Evaluator:   eval,
+		SessionInfo: sessInfo,
 	})
 	if eval != nil {
 		srv.RegisterEvaluator("sandbox-0", eval)

@@ -46,7 +46,8 @@ type Config struct {
 // Safe to run from a single goroutine (not internally concurrent).
 type Loop struct {
 	eval         condition.Eval
-	advancer     condition.Advancer // nil if eval doesn't implement Advancer
+	advancer     condition.Advancer   // nil if eval doesn't implement Advancer
+	positioner   condition.Positioner // nil if eval doesn't implement Positioner
 	bus          *eventbus.Bus
 	lookaheadSec float64
 	tickCh       <-chan time.Time
@@ -58,6 +59,7 @@ type Loop struct {
 	prevInCoverageSet   bool // false until first tick
 	lookaheadOpenFired  bool
 	lookaheadCloseFired bool
+	lastPositionAt      time.Time // Last time position was published
 }
 
 // New creates a Loop from the given config.
@@ -74,9 +76,14 @@ func New(cfg Config) *Loop {
 	if a, ok := cfg.Evaluator.(condition.Advancer); ok {
 		adv = a
 	}
+	var pos condition.Positioner
+	if p, ok := cfg.Evaluator.(condition.Positioner); ok {
+		pos = p
+	}
 	return &Loop{
 		eval:         cfg.Evaluator,
 		advancer:     adv,
+		positioner:   pos,
 		bus:          cfg.Bus,
 		lookaheadSec: cfg.LookaheadSec,
 		tickCh:       cfg.TickCh,
@@ -179,5 +186,20 @@ func (l *Loop) tick() {
 	// Publish link state while in coverage.
 	if cov.InCoverage {
 		l.bus.PublishLinkState(link, now)
+	}
+
+	// Publish satellite position every ~1s (elapsed-time throttled).
+	if l.positioner != nil && (l.lastPositionAt.IsZero() || now.Sub(l.lastPositionAt) >= time.Second) {
+		lat, lon, alt, elev, az, rng := l.positioner.Position()
+		l.bus.PublishSatellitePosition(eventbus.SatellitePositionEvent{
+			LatDeg:       lat,
+			LonDeg:       lon,
+			AltKm:        alt,
+			ElevationDeg: elev,
+			AzimuthDeg:   az,
+			RangeKm:      rng,
+			At:           now,
+		})
+		l.lastPositionAt = now
 	}
 }

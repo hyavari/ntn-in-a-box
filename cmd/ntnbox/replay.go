@@ -104,7 +104,7 @@ func runReplay(args []string) error {
 
 	// Optionally start API host.
 	if *addr != "" {
-		startAPIHost(*addr, bus, registry, nil)
+		startAPIHost(*addr, bus, registry, nil, nil)
 	}
 
 	fmt.Fprintf(os.Stderr, "ntnbox: replaying %s (speed: %.1fx)\n", *filePath, *speed)

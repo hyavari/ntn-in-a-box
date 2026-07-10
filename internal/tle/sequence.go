@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	satellite "github.com/joshuaferrara/go-satellite"
+
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/condition"
 )
 
@@ -14,6 +16,8 @@ type SequenceConfig struct {
 	Speed        float64   // Gap acceleration factor (default: 1.0)
 	StartAt      time.Time // Simulation epoch (what sim-time "now" maps to)
 	LookaheadSec float64   // Lookahead for coverage transitions (default: 30)
+	Observer     Observer  // Ground observer (for Position())
+	Sat          Satellite // TLE satellite (for Position() SGP4 propagation)
 }
 
 // passEntry holds a pass along with its pre-built evaluator.
@@ -35,6 +39,12 @@ type SequenceEvaluator struct {
 	speed        float64
 	lookaheadSec float64
 	startAt      time.Time // The simulation time that wallStart maps to
+
+	// For Position() — satellite propagation and observer look angles.
+	observer Observer
+	sat      Satellite
+	sgp4Sat  satellite.Satellite // Cached SGP4 initialization
+	obsLL    satellite.LatLong   // Observer in radians (cached)
 
 	mu      sync.RWMutex
 	simTime time.Time // Current simulation time (advanced by Advance only)
@@ -101,6 +111,10 @@ func NewSequenceEvaluator(passes []Pass, model LinkModel, cfg SequenceConfig) (*
 		speed:        speed,
 		lookaheadSec: lookahead,
 		startAt:      startAt,
+		observer:     cfg.Observer,
+		sat:          cfg.Sat,
+		sgp4Sat:      initSGP4(cfg.Sat),
+		obsLL:        observerLatLong(cfg.Observer),
 		simTime:      startAt,
 		started:      false,
 	}, nil
@@ -257,4 +271,29 @@ func (se *SequenceEvaluator) SimTime() time.Time {
 	se.mu.RLock()
 	defer se.mu.RUnlock()
 	return se.simTime
+}
+
+// Position computes the satellite's current geodetic position and look
+// angles from the observer at the current simulation time. Implements
+// condition.Positioner. Thread-safe (reads simTime under RLock).
+func (se *SequenceEvaluator) Position() (latDeg, lonDeg, altKm, elevDeg, azDeg, rangeKm float64) {
+	se.mu.RLock()
+	t := se.simTime
+	se.mu.RUnlock()
+
+	pos, ok := geodeticAt(se.sgp4Sat, se.obsLL, se.observer.AltKm, t)
+	if !ok {
+		return 0, 0, 0, -90, 0, 0
+	}
+	return pos.LatDeg, pos.LonDeg, pos.AltKm, pos.ElevationDeg, pos.AzimuthDeg, pos.RangeKm
+}
+
+// Observer returns the stored observer location.
+func (se *SequenceEvaluator) Observer() Observer {
+	return se.observer
+}
+
+// Sat returns the stored satellite TLE data.
+func (se *SequenceEvaluator) SatData() Satellite {
+	return se.sat
 }

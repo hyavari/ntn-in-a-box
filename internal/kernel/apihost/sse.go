@@ -112,8 +112,45 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 
+	// Subscribe to satellite position events (TLE mode only).
+	unsubPosition := s.bus.SubscribeSatellitePosition(func(ev eventbus.SatellitePositionEvent) {
+		payload := struct {
+			LatDeg       float64 `json:"lat_deg"`
+			LonDeg       float64 `json:"lon_deg"`
+			AltKm        float64 `json:"alt_km"`
+			ElevationDeg float64 `json:"elevation_deg"`
+			AzimuthDeg   float64 `json:"azimuth_deg"`
+			RangeKm      float64 `json:"range_km"`
+		}{
+			LatDeg:       ev.LatDeg,
+			LonDeg:       ev.LonDeg,
+			AltKm:        ev.AltKm,
+			ElevationDeg: ev.ElevationDeg,
+			AzimuthDeg:   ev.AzimuthDeg,
+			RangeKm:      ev.RangeKm,
+		}
+		data, err := json.Marshal(payload)
+		if err != nil {
+			return
+		}
+		msg := fmt.Sprintf("event: satellite_position\ndata: %s\n\n", data)
+		select {
+		case ch <- []byte(msg):
+		default:
+		}
+	})
+
 	// Write loop: stream events until client disconnects.
 	ctx := r.Context()
+
+	// Send session_info as the very first event.
+	if s.sessionInfo != nil {
+		if data, err := json.Marshal(s.sessionInfo); err == nil {
+			msg := fmt.Sprintf("event: session_info\ndata: %s\n\n", data)
+			_, _ = w.Write([]byte(msg))
+			flusher.Flush()
+		}
+	}
 
 	// Send initial state immediately so the browser doesn't wait for
 	// the next transition event.
@@ -140,6 +177,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			unsubCoverage()
 			unsubLinkState()
 			unsubObs()
+			unsubPosition()
 			return
 		case msg := <-ch:
 			_, _ = w.Write(msg)

@@ -12,15 +12,27 @@ import (
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/profile"
 )
 
+// SessionInfo describes the current session mode for the GUI frontend.
+type SessionInfo struct {
+	Mode           string       `json:"mode"`
+	SatelliteName  string       `json:"satellite_name,omitempty"`
+	ObserverLatDeg float64      `json:"observer_lat_deg,omitempty"`
+	ObserverLonDeg float64      `json:"observer_lon_deg,omitempty"`
+	ObserverAltKm  float64      `json:"observer_alt_km,omitempty"`
+	ProfileName    string       `json:"profile_name,omitempty"`
+	OrbitPoints    [][3]float64 `json:"orbit_points,omitempty"`
+}
+
 // Server is the kernel's HTTP API host. It exposes health, profile,
 // device, and condition-state endpoints. It wires together the kernel
 // packages into a queryable surface.
 type Server struct {
-	mux      *http.ServeMux
-	profiles map[string]*profile.Profile
-	registry *device.Registry
-	bus      *eventbus.Bus
-	eval     condition.Eval
+	mux         *http.ServeMux
+	profiles    map[string]*profile.Profile
+	registry    *device.Registry
+	bus         *eventbus.Bus
+	eval        condition.Eval
+	sessionInfo *SessionInfo
 
 	// Per-device evaluators, created at device registration time.
 	mu         sync.RWMutex
@@ -29,10 +41,11 @@ type Server struct {
 
 // Config holds what the server needs to start.
 type Config struct {
-	Profiles  []*profile.Profile
-	Registry  *device.Registry
-	Bus       *eventbus.Bus    // optional; if nil, /events returns 503
-	Evaluator condition.Eval   // optional; used by SSE to enrich coverage events
+	Profiles    []*profile.Profile
+	Registry    *device.Registry
+	Bus         *eventbus.Bus    // optional; if nil, /events returns 503
+	Evaluator   condition.Eval   // optional; used by SSE to enrich coverage events
+	SessionInfo *SessionInfo     // optional; sent to GUI on SSE connect
 }
 
 // New creates a Server with the given config and returns it ready to
@@ -45,12 +58,13 @@ func New(cfg Config) *Server {
 	}
 
 	s := &Server{
-		mux:        http.NewServeMux(),
-		profiles:   profiles,
-		registry:   cfg.Registry,
-		bus:        cfg.Bus,
-		eval:       cfg.Evaluator,
-		evaluators: make(map[string]condition.Eval),
+		mux:         http.NewServeMux(),
+		profiles:    profiles,
+		registry:    cfg.Registry,
+		bus:         cfg.Bus,
+		eval:        cfg.Evaluator,
+		sessionInfo: cfg.SessionInfo,
+		evaluators:  make(map[string]condition.Eval),
 	}
 	s.registerRoutes()
 	return s

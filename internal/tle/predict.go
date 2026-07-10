@@ -2,7 +2,6 @@ package tle
 
 import (
 	"fmt"
-	"math"
 	"time"
 
 	satellite "github.com/joshuaferrara/go-satellite"
@@ -67,13 +66,10 @@ func PredictPasses(sat Sat, obs Observer, startTime time.Time, cfg PredictConfig
 	cfg = cfg.withDefaults()
 
 	// Initialize the SGP4 propagator.
-	sgp4Sat := satellite.TLEToSat(sat.Line1, sat.Line2, satellite.GravityWGS84)
+	sgp4Sat := initSGP4(sat)
 
 	// Observer coordinates in radians for the go-satellite library.
-	obsLL := satellite.LatLong{
-		Latitude:  obs.LatDeg * math.Pi / 180.0,
-		Longitude: obs.LonDeg * math.Pi / 180.0,
-	}
+	obsLL := observerLatLong(obs)
 
 	endTime := startTime.Add(cfg.MaxSearch)
 	coarseStep := 30 * time.Second // Coarse scanning step
@@ -155,23 +151,11 @@ type Sat = Satellite
 // elevationAt computes the elevation angle (in degrees) of the
 // satellite as seen from the observer at time t.
 func elevationAt(sgp4Sat satellite.Satellite, obsLL satellite.LatLong, obsAltKm float64, t time.Time) (elevDeg, rangeKm float64) {
-	t = t.UTC()
-	year, month, day := t.Date()
-	hour, min, sec := t.Clock()
-
-	pos, _ := satellite.Propagate(sgp4Sat, year, int(month), day, hour, min, sec)
-
-	// Check for propagation failure (zero vector).
-	if pos.X == 0 && pos.Y == 0 && pos.Z == 0 {
+	pos, ok := geodeticAt(sgp4Sat, obsLL, obsAltKm, t)
+	if !ok {
 		return -90, 0
 	}
-
-	jday := satellite.JDay(year, int(month), day, hour, min, sec)
-	lookAngles := satellite.ECIToLookAngles(pos, obsLL, obsAltKm, jday)
-
-	elevDeg = lookAngles.El * 180.0 / math.Pi
-	rangeKm = lookAngles.Rg
-	return elevDeg, rangeKm
+	return pos.ElevationDeg, pos.RangeKm
 }
 
 // findRise scans forward from start to find when the satellite first
@@ -324,4 +308,47 @@ func tleEpoch(line1 string) (time.Time, error) {
 	jan1 := time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
 	epochTime := jan1.Add(time.Duration((dayOfYear - 1) * 24 * float64(time.Hour)))
 	return epochTime, nil
+}
+
+
+// ComputeOrbitPoints propagates the satellite for one full orbital
+// revolution and returns ~200 geodetic points [lat, lon, alt].
+// Used by the GUI to render the orbit track on a globe.
+func ComputeOrbitPoints(sat Satellite, refTime time.Time, numPoints int) [][3]float64 {
+	if numPoints <= 0 {
+		numPoints = 200
+	}
+
+	sgp4Sat := initSGP4(sat)
+
+	// Estimate orbital period from mean motion (revs/day) in TLE line 2.
+	// Mean motion is at columns 53-63 of line 2.
+	// Fallback: assume ~90 min for LEO.
+	periodMin := 90.0
+	if len(sat.Line2) >= 63 {
+		var mm float64
+		if _, err := fmt.Sscanf(sat.Line2[52:63], "%f", &mm); err == nil && mm > 0 {
+			periodMin = 1440.0 / mm // minutes per revolution
+		}
+	}
+
+	periodSec := periodMin * 60.0
+	stepSec := periodSec / float64(numPoints)
+
+	// Use a zero-observer LatLong — we only need geodetic position, not look angles.
+	zeroObs := satellite.LatLong{}
+
+	points := make([][3]float64, 0, numPoints)
+	t := refTime.UTC()
+
+	for i := 0; i < numPoints; i++ {
+		ct := t.Add(time.Duration(float64(i)*stepSec) * time.Second)
+		pos, ok := geodeticAt(sgp4Sat, zeroObs, 0, ct)
+		if !ok {
+			continue
+		}
+		points = append(points, [3]float64{pos.LatDeg, pos.LonDeg, pos.AltKm})
+	}
+
+	return points
 }

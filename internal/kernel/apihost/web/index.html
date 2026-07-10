@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NTN-in-a-Box</title>
     <link rel="stylesheet" href="style.css">
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.165/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165/examples/jsm/"
+        }
+    }
+    </script>
 </head>
 <body>
     <div class="title-bar">
@@ -15,7 +23,7 @@
     <div class="container">
         <!-- Left: Animation Panel -->
         <div class="animation-panel" id="animationPanel">
-            <!-- Sky background -->
+            <!-- Sky background (profile mode) -->
             <div class="sky" id="sky">
                 <!-- Stars -->
                 <div class="star" style="top:8%;left:12%"></div>
@@ -53,6 +61,9 @@
             <div class="anim-progress">
                 <div class="anim-progress-fill" id="animProgress"></div>
             </div>
+
+            <!-- Globe view (TLE mode) — canvas injected by globe-view.js -->
+            <div class="globe-container" id="globeContainer" style="display:none"></div>
         </div>
 
         <!-- Right: Metrics Panel -->
@@ -133,6 +144,6 @@
         <div class="idle-hint">start <code>ntnbox run --addr :8080 --profile ... -- cmd</code></div>
     </div>
 
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>

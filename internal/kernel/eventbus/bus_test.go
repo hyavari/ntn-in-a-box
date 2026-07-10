@@ -270,3 +270,38 @@ func TestUnsubscribe_CalledTwiceIsSafe(t *testing.T) {
 	unsub()
 	unsub() // second call should not panic
 }
+
+
+func TestPublishSatellitePosition(t *testing.T) {
+	b := New(DefaultLinkStateThrottle)
+
+	var received []SatellitePositionEvent
+	unsub := b.SubscribeSatellitePosition(func(ev SatellitePositionEvent) {
+		received = append(received, ev)
+	})
+
+	b.PublishSatellitePosition(SatellitePositionEvent{
+		LatDeg: 35.6, LonDeg: 139.6, AltKm: 420,
+		ElevationDeg: 45, AzimuthDeg: 180, RangeKm: 600,
+		At: testStart,
+	})
+
+	if len(received) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(received))
+	}
+	if received[0].LatDeg != 35.6 {
+		t.Errorf("LatDeg = %f, want 35.6", received[0].LatDeg)
+	}
+	if received[0].AltKm != 420 {
+		t.Errorf("AltKm = %f, want 420", received[0].AltKm)
+	}
+
+	// Unsubscribe and verify no more events.
+	unsub()
+	b.PublishSatellitePosition(SatellitePositionEvent{
+		LatDeg: 40, LonDeg: -74, AltKm: 410, At: testStart,
+	})
+	if len(received) != 1 {
+		t.Errorf("expected 1 event after unsub, got %d", len(received))
+	}
+}

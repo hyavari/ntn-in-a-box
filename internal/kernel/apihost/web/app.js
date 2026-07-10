@@ -1,5 +1,5 @@
 // NTN-in-a-Box GUI — app.js
-// SSE connection, state management, animation, metrics updates.
+// Core module: SSE connection, state management, metrics, view dispatch.
 
 'use strict';
 
@@ -23,17 +23,18 @@ const state = {
 
 const MAX_HISTORY = 20;
 
+// --- Active view module ---
+let activeView = null;
+let viewLoading = false; // True while activateView is in-flight
+let sessionInfoReceived = false; // True once session_info SSE event arrives
+let pendingSessionInfo = null; // Queued TLE session_info if it arrives while loading
+
 // --- DOM refs ---
 
 const $ = (id) => document.getElementById(id);
 
 const els = {
-    sky: $('sky'),
-    satellite: $('satellite'),
-    beam: $('beam'),
-    device: document.querySelector('.device-body'),
-    linkStatus: $('linkStatus'),
-    animProgress: $('animProgress'),
+    animationPanel: $('animationPanel'),
     coverageIndicator: $('coverageIndicator'),
     profileName: $('profileName'),
     countdown: $('countdown'),
@@ -58,6 +59,63 @@ const els = {
     profileSchedule: $('profileSchedule'),
 };
 
+// --- View Management ---
+
+async function activateView(sessionInfo) {
+    // If TLE session_info arrives after sky fallback loaded, tear down
+    // sky and switch to globe.
+    if (activeView && sessionInfo && sessionInfo.mode === 'tle') {
+        activeView.destroy();
+        activeView = null;
+    }
+
+    // If currently loading and TLE arrives, queue it for after load completes.
+    if (viewLoading) {
+        if (sessionInfo && sessionInfo.mode === 'tle') {
+            pendingSessionInfo = sessionInfo;
+        }
+        return;
+    }
+
+    if (activeView) return;
+    viewLoading = true;
+
+    try {
+        if (sessionInfo && sessionInfo.mode === 'tle') {
+            // TLE mode: try to load globe view.
+            try {
+                const globe = await import('./globe-view.js');
+                const sky = els.animationPanel.querySelector('.sky');
+                const globeContainer = $('globeContainer');
+                if (sky) sky.style.display = 'none';
+                if (globeContainer) globeContainer.style.display = 'block';
+                globe.init(globeContainer, sessionInfo);
+                activeView = globe;
+                return;
+            } catch (e) {
+                console.warn('Globe view failed to load, falling back to sky view:', e);
+            }
+        }
+
+        // Default: sky view (profile mode or fallback).
+        const sky = await import('./sky-view.js');
+        sky.init(els.animationPanel);
+        activeView = sky;
+    } finally {
+        viewLoading = false;
+        // Check if TLE session_info arrived while we were loading.
+        if (pendingSessionInfo) {
+            const pending = pendingSessionInfo;
+            pendingSessionInfo = null;
+            if (activeView) {
+                activeView.destroy();
+                activeView = null;
+            }
+            await activateView(pending);
+        }
+    }
+}
+
 // --- SSE Connection ---
 
 function connect() {
@@ -65,11 +123,24 @@ function connect() {
 
     const es = new EventSource('/events');
 
+    es.addEventListener('session_info', (e) => {
+        const info = JSON.parse(e.data);
+        sessionInfoReceived = true;
+        // Update UI header with session info.
+        if (info.mode === 'tle' && info.satellite_name) {
+            els.profileName.textContent = `TLE: ${info.satellite_name}`;
+            els.profileDetail.textContent = info.satellite_name;
+            els.profileMode.textContent = 'tle (orbital)';
+            const lat = info.observer_lat_deg?.toFixed(2) || '?';
+            const lon = info.observer_lon_deg?.toFixed(2) || '?';
+            els.profileSchedule.textContent = `observer: ${lat}\u00B0, ${lon}\u00B0`;
+        }
+        activateView(info);
+    });
+
     es.addEventListener('coverage', (e) => {
         const data = JSON.parse(e.data);
 
-        // If we receive a real coverage event after replay was done
-        // (e.g. replay-again started a new session), reset the done state.
         if (state.replayDone) {
             state.replayDone = false;
         }
@@ -79,9 +150,28 @@ function connect() {
             state.elapsedSec = data.elapsed_sec;
             state.untilNext = data.until_next_transition;
         }
-        // Reset elapsed on new window open (replay or live).
         if (data.kind === 'window_opened') {
             state.elapsedSec = data.elapsed_sec || 0;
+            // In TLE mode, derive windowSec from the coverage event
+            // (until_next_transition at window open = window duration).
+            if (sessionInfoReceived && data.until_next_transition > 0) {
+                state.windowSec = data.until_next_transition;
+                updateScheduleLabels();
+            }
+        }
+        if (data.kind === 'initial' && data.in_coverage && sessionInfoReceived) {
+            // Derive windowSec from initial state: elapsed + remaining = total window.
+            if (data.until_next_transition > 0) {
+                state.windowSec = (data.elapsed_sec || 0) + data.until_next_transition;
+                updateScheduleLabels();
+            }
+        }
+        if (data.kind === 'window_closed') {
+            // In TLE mode, derive gap duration from coverage event.
+            if (sessionInfoReceived && data.until_next_transition > 0) {
+                state.periodSec = state.windowSec + data.until_next_transition;
+                updateScheduleLabels();
+            }
         }
         state.hasData = true;
         hideIdle();
@@ -108,17 +198,22 @@ function connect() {
         state.metrics.loss = data.loss_pct;
         state.metrics.bandwidth = data.bandwidth_kbps;
         state.hasData = true;
-        // Link-state events only arrive while in coverage, so if we
-        // haven't received a coverage event yet, infer coverage.
         if (!state.inCoverage) {
             state.inCoverage = true;
             updateCoverageStatus();
-            updateAnimation();
+            if (activeView) activeView.update(state);
         }
         hideIdle();
         pushHistory();
         updateMetrics();
         updateSparklines();
+    });
+
+    es.addEventListener('satellite_position', (e) => {
+        const data = JSON.parse(e.data);
+        if (activeView && activeView.updatePosition) {
+            activeView.updatePosition(data);
+        }
     });
 
     es.onopen = () => {
@@ -143,7 +238,6 @@ async function fetchProfile() {
             const name = profiles[0].name || profiles[0].Name;
             const detailResp = await fetch(`/profiles/${name}`);
             const p = await detailResp.json();
-            // Handle both capitalized (Go default) and lowercase JSON keys.
             const sched = p.schedule || p.Schedule || {};
             const mode = sched.mode || sched.Mode || 'periodic';
             const periodSec = sched.period_sec || sched.PeriodSec || 600;
@@ -160,7 +254,6 @@ async function fetchProfile() {
             els.profileName.textContent = profileName;
             els.timelinePeriod.textContent = `period: ${state.periodSec}s`;
 
-            // Profile details
             els.profileDetail.textContent = profileName;
             els.profileMode.textContent = mode;
             if (mode === 'periodic') {
@@ -170,11 +263,14 @@ async function fetchProfile() {
             }
             buildTimeline();
         } else {
-            // Replay mode: no profiles available. Use defaults.
-            els.profileName.textContent = 'replay';
-            els.profileDetail.textContent = 'replay';
-            els.profileMode.textContent = state.mode;
-            els.profileSchedule.textContent = `${state.periodSec}s period / ${state.windowSec}s window`;
+            // No profiles available (replay or TLE mode).
+            // Only set fallback labels if session_info hasn't already set TLE labels.
+            if (!sessionInfoReceived) {
+                els.profileName.textContent = 'replay';
+                els.profileDetail.textContent = 'replay';
+                els.profileMode.textContent = state.mode;
+                els.profileSchedule.textContent = `${state.periodSec}s period / ${state.windowSec}s window`;
+            }
             buildTimeline();
         }
     } catch (e) {
@@ -186,77 +282,29 @@ async function fetchProfile() {
 
 function updateAll() {
     updateCoverageStatus();
-    updateAnimation();
+    if (activeView) activeView.update(state);
     updateProgressBar();
     updateTimeline();
+}
+
+// updateScheduleLabels refreshes the timeline period label when
+// windowSec/periodSec change dynamically (TLE mode derives these
+// from coverage events).
+function updateScheduleLabels() {
+    if (state.periodSec > 0) {
+        els.timelinePeriod.textContent = `period: ${Math.round(state.periodSec)}s`;
+    }
 }
 
 function updateCoverageStatus() {
     if (state.inCoverage) {
         els.coverageIndicator.textContent = '▲ IN COVERAGE';
         els.coverageIndicator.classList.remove('out');
-        els.linkStatus.textContent = '● LINKED';
-        els.linkStatus.classList.remove('disconnected');
     } else {
         els.coverageIndicator.textContent = '▼ OUT OF COVERAGE';
         els.coverageIndicator.classList.add('out');
-        els.linkStatus.textContent = '● NO LINK';
-        els.linkStatus.classList.add('disconnected');
     }
     els.countdown.textContent = `${Math.round(state.untilNext)}s remaining`;
-}
-
-function updateAnimation() {
-    if (state.inCoverage) {
-        // Satellite position: map elapsedSec/windowSec to arc position
-        const progress = Math.min(state.elapsedSec / state.windowSec, 1);
-        const pos = positionOnArc(progress);
-        els.satellite.style.left = pos.x + '%';
-        els.satellite.style.top = pos.y + '%';
-        els.satellite.classList.remove('hidden');
-
-        // Beam: position at satellite X, stretch from satellite Y to device
-        els.beam.style.left = pos.x + '%';
-        els.beam.style.top = (pos.y + 2) + '%';
-        els.beam.style.height = (85 - pos.y - 2) + '%';
-        els.beam.style.width = (85 - pos.y) * 0.8 + 'px'; // wider when higher
-        els.beam.classList.remove('hidden');
-
-        // Device linked
-        els.device.classList.add('linked');
-        els.device.classList.remove('unlinked');
-
-        // Sky bright
-        els.sky.classList.remove('dark');
-
-        // Progress
-        els.animProgress.style.width = (progress * 100) + '%';
-        els.animProgress.classList.remove('out');
-    } else {
-        // Out of coverage
-        els.satellite.classList.add('hidden');
-        els.beam.classList.add('hidden');
-        els.device.classList.remove('linked');
-        els.device.classList.add('unlinked');
-        els.sky.classList.add('dark');
-
-        // Gap progress
-        const gap = state.periodSec - state.windowSec;
-        const gapElapsed = gap - state.untilNext;
-        const gapProgress = gap > 0 ? Math.min(gapElapsed / gap, 1) : 0;
-        els.animProgress.style.width = (gapProgress * 100) + '%';
-        els.animProgress.classList.add('out');
-    }
-}
-
-function positionOnArc(progress) {
-    // Parametric half-ellipse matching CSS orbit-arc:
-    // left 8% to right 92%, arc top at ~10%, bottom at ~70%
-    const angle = Math.PI * (1 - progress); // PI to 0 (left to right)
-    const x = 8 + 84 * progress; // 8% to 92%
-    // Ellipse: center at 40% vertically, radius 30%
-    const y = 40 - 30 * Math.sin(angle); // peaks at 10% when overhead
-    return { x, y };
 }
 
 function updateMetrics() {
@@ -327,7 +375,7 @@ function renderSparkline(svg, values) {
 
     const points = values.map((v, i) => {
         const x = i * step;
-        const y = 28 - ((v - min) / range) * 26; // 2px top margin, 2px bottom
+        const y = 28 - ((v - min) / range) * 26;
         return `${x.toFixed(1)},${y.toFixed(1)}`;
     }).join(' ');
 
@@ -342,11 +390,10 @@ function buildTimeline() {
 
 function updateTimeline() {
     const bar = els.timelineBar;
-    const total = state.periodSec * 2; // show 2 periods
+    const total = state.periodSec * 2;
     const windowPct = (state.windowSec / total) * 100;
     const gapPct = ((state.periodSec - state.windowSec) / total) * 100;
 
-    // Build segments: [past-window, past-gap, current-window, current-gap]
     bar.innerHTML = '';
 
     // Period 1 (past)
@@ -358,12 +405,12 @@ function updateTimeline() {
     addSegment(bar, gapPct, 'gap future');
 
     // Now cursor position
-    let cursorPct = 50; // default: middle of current window
+    let cursorPct = 50;
     if (state.inCoverage) {
-        const windowStart = windowPct + gapPct; // start of current window in %
+        const windowStart = windowPct + gapPct;
         cursorPct = windowStart + (state.elapsedSec / state.windowSec) * windowPct;
     } else {
-        const gapStart = windowPct + gapPct + windowPct; // after current window
+        const gapStart = windowPct + gapPct + windowPct;
         const gap = state.periodSec - state.windowSec;
         const gapElapsed = gap - state.untilNext;
         cursorPct = gapStart + (gapElapsed / gap) * gapPct;
@@ -374,10 +421,8 @@ function updateTimeline() {
     cursor.style.left = cursorPct + '%';
     bar.appendChild(cursor);
 
-    // Labels
-    const halfPeriod = Math.round(state.periodSec);
-    els.timelineLeft.textContent = `-${halfPeriod}s`;
-    els.timelineRight.textContent = `+${halfPeriod}s`;
+    els.timelineLeft.textContent = `-${Math.round(state.periodSec)}s`;
+    els.timelineRight.textContent = `+${Math.round(state.periodSec)}s`;
 }
 
 function addSegment(bar, widthPct, classes) {
@@ -398,7 +443,7 @@ setInterval(() => {
         state.elapsedSec += 1;
     }
     updateCoverageStatus();
-    updateAnimation();
+    if (activeView) activeView.update(state);
     updateProgressBar();
     updateTimeline();
 }, 1000);
@@ -423,6 +468,13 @@ function hideIdle() {
 }
 
 // --- Init ---
+
+// If no session_info arrives within 2s (old backend), default to sky view.
+setTimeout(async () => {
+    if (!activeView && !viewLoading && !sessionInfoReceived) {
+        await activateView(null);
+    }
+}, 2000);
 
 fetchProfile();
 connect();

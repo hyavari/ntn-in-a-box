@@ -25,6 +25,7 @@ type Bus struct {
 	coverageSubs      []*CoverageHandler
 	linkStateSubs     []*LinkStateHandler
 	observabilitySubs []*ObservabilityHandler
+	positionSubs      []*SatellitePositionHandler
 
 	throttle     LinkStateThrottle
 	lastLinkAt   time.Time
@@ -151,6 +152,38 @@ func (b *Bus) Emit(ev ObservabilityEvent) {
 	b.mu.Lock()
 	subs := make([]*ObservabilityHandler, len(b.observabilitySubs))
 	copy(subs, b.observabilitySubs)
+	b.mu.Unlock()
+
+	for _, p := range subs {
+		(*p)(ev)
+	}
+}
+
+// SubscribeSatellitePosition registers h to be called for every
+// SatellitePositionEvent. Returns an unsubscribe function.
+func (b *Bus) SubscribeSatellitePosition(h SatellitePositionHandler) func() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	ptr := &h
+	b.positionSubs = append(b.positionSubs, ptr)
+	return func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		for i, p := range b.positionSubs {
+			if p == ptr {
+				b.positionSubs = append(b.positionSubs[:i], b.positionSubs[i+1:]...)
+				return
+			}
+		}
+	}
+}
+
+// PublishSatellitePosition notifies all position subscribers.
+// Never throttled (already rate-limited by the driver to ~1/s).
+func (b *Bus) PublishSatellitePosition(ev SatellitePositionEvent) {
+	b.mu.Lock()
+	subs := make([]*SatellitePositionHandler, len(b.positionSubs))
+	copy(subs, b.positionSubs)
 	b.mu.Unlock()
 
 	for _, p := range subs {
