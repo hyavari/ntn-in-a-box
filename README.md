@@ -89,6 +89,7 @@ A convenience script that builds everything, runs a demo, and cleans up:
 ./scripts/demo.sh --tui --replay session.jsonl # replay with TUI dashboard
 ./scripts/demo.sh geo_steady                   # different profile
 ./scripts/demo.sh d2c_burst curl https://example.com  # custom command
+./scripts/demo.sh sos_burst                    # emergency/SOS short burst
 PRUNE=1 ./scripts/demo.sh                     # also remove docker image on exit
 ```
 
@@ -340,7 +341,7 @@ host.
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `profile` | Yes* | — | Profile name (`leo_pass_90s`, `geo_steady`, `d2c_burst`) or path to YAML |
+| `profile` | Yes* | — | Profile name (`leo_pass_90s`, `geo_steady`, `d2c_burst`, `sos_burst`, `sos_hostile`) or path to YAML |
 | `command` | Yes | — | Command to run under NTN conditions |
 | `replay` | No* | — | Path to a JSONL recording (overrides `profile`) |
 | `speed` | No | `1` | Replay speed multiplier |
@@ -500,7 +501,8 @@ curves:
   # jitter_ms, loss_pct, bandwidth_kbps follow the same shape
 ```
 
-Sample profiles included: `leo_pass_90s`, `geo_steady`, `d2c_burst`.
+Sample profiles included: `leo_pass_90s`, `geo_steady`, `d2c_burst`,
+`sos_burst`, `sos_hostile`.
 
 ### Out-of-coverage behavior
 

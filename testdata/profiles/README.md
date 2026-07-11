@@ -10,6 +10,10 @@ alongside the loader in `internal/kernel/profile`.
   profile.
 - `d2c_burst.yaml` — Direct-to-Cell: narrowband, opportunistic bursts to
   an unmodified phone (Starlink Direct to Cell, AST SpaceMobile).
+- `sos_burst.yaml` — emergency / SOS short burst (15s window, long gap,
+  tiny bandwidth, elevated loss). Good default for queue-across-gap demos.
+- `sos_hostile.yaml` — harsher SOS variant (10s window, higher loss).
+  Stress-tests offline queues and deadline-aware send.
 
 ## Sourcing
 

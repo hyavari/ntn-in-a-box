@@ -66,6 +66,8 @@ Available profiles:
 - `leo_pass_90s` — single-satellite LEO pass (Iridium/Swarm-style visibility windows)
 - `geo_steady` — continuous GEO link (always connected, variable quality)
 - `d2c_burst` — short burst windows (Direct-to-Cell store-and-forward style)
+- `sos_burst` — emergency/SOS short burst (15s window, tiny bandwidth, elevated loss)
+- `sos_hostile` — harsher SOS variant for stress-testing offline queues
 
 ## Step 3: Test a Node.js app with retry logic
 
@@ -244,7 +246,7 @@ available (no evaluator or profile loaded).
 
 ## Next steps
 
-- Try different profiles (`geo_steady`, `d2c_burst`) to see how
+- Try different profiles (`geo_steady`, `d2c_burst`, `sos_burst`) to see how
   your app handles different satellite architectures
 - Build a custom profile that matches your target constellation
 - Use the `--addr` API to build satellite-aware features in your app

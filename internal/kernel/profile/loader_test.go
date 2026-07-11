@@ -34,6 +34,20 @@ func TestLoadFile_SampleProfiles(t *testing.T) {
 			wantWindow:   20,
 			wantCurveLen: 1,
 		},
+		{
+			file:         "sos_burst.yaml",
+			wantName:     "sos_burst",
+			wantMode:     ModePeriodic,
+			wantWindow:   15,
+			wantCurveLen: 3,
+		},
+		{
+			file:         "sos_hostile.yaml",
+			wantName:     "sos_hostile",
+			wantMode:     ModePeriodic,
+			wantWindow:   10,
+			wantCurveLen: 2,
+		},
 	}
 
 	for _, tt := range tests {
