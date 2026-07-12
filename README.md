@@ -326,10 +326,10 @@ step-by-step walkthrough.
 
 ### Mobile / Android
 
-For emulator workflows (Linux/WSL2 wrap, macOS/Windows limits, sample app),
-see [TUTORIAL.md — Step 11](TUTORIAL.md#step-11-test-with-an-android-emulator),
-`./scripts/demo-android.sh`, and `samples/android-connectivity/`.
-Full traffic shaping needs Linux, WSL2, or CI — not native macOS/Windows netns.
+For emulator workflows, see [TUTORIAL.md — Step 11](TUTORIAL.md#step-11-test-with-an-android-emulator),
+`./scripts/demo-android.sh`, `samples/android-connectivity/`, and
+[`android/ntnbox/`](android/ntnbox/). Full emulator shaping needs Linux, WSL2,
+or CI (macOS Docker does not shape a host AVD).
 
 ## GitHub Action
 

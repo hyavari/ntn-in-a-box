@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# demo-android.sh — Print the Mobile DX path for Android emulator testing.
+# demo-android.sh — Print the Android emulator testing path for ntnbox.
 #
 # Usage:
 #   ./scripts/demo-android.sh              # default profile: sos_burst
@@ -8,8 +8,8 @@
 #
 # Does not require the Android SDK. Does not start the emulator.
 # On Linux/WSL2, prints a wrap-emulator command for full NTN shaping.
-# On macOS/Windows, prints API + adb reverse guidance (full shaping via
-# WSL2, Docker, or CI).
+# On macOS/Windows, prints API + adb reverse guidance (full emulator
+# shaping requires Linux, WSL2, or CI — not Docker wrapping a host AVD).
 
 set -euo pipefail
 
@@ -28,7 +28,7 @@ Examples:
   ./scripts/demo-android.sh
   ./scripts/demo-android.sh leo_pass_90s
 
-See TUTORIAL.md (Mobile DX / Android emulator step) for the full walkthrough.
+See TUTORIAL.md Step 11 for the full walkthrough.
 EOF
 }
 
@@ -52,16 +52,17 @@ ADDR=":8080"
 API="http://localhost:8080"
 DEVICE="sandbox-0"
 
-echo "=== NTN-in-a-Box Mobile DX ==="
+echo "=== NTN-in-a-Box — Android emulator path ==="
 echo
-echo "Profile:  $PROFILE  ($PROFILE_PATH)"
-echo "API:      $API"
-echo "Device:   $DEVICE"
-echo "GUI:      $API/ui"
+echo "Profile:   $PROFILE  ($PROFILE_PATH)"
+echo "API:       $API"
+echo "Device:    $DEVICE"
+echo "GUI:       $API/ui"
 echo "Condition: $API/devices/$DEVICE/condition"
-echo "Sample:   samples/android-connectivity/"
+echo "Sample:    samples/android-connectivity/"
+echo "Companion: android/ntnbox/"
 echo
-echo "adb reverse (emulator can reach host API):"
+echo "adb reverse (emulator → host API):"
 echo "  adb reverse tcp:8080 tcp:8080"
 echo
 
@@ -75,36 +76,42 @@ case "$OS" in
     echo "2) Wrap the emulator (replace @MyAVD):"
     echo "     sudo ./ntnbox run --addr $ADDR --profile $PROFILE_PATH -- emulator @MyAVD"
     echo
-    echo "3) In another terminal, build/install the sample:"
-    echo "     cd samples/android-connectivity && ./gradlew :app:installDebug"
+    echo "3) Build/install the sample (Android Studio recommended):"
+    echo "     open samples/android-connectivity/ in Android Studio → Run"
+    echo "     # or: cd samples/android-connectivity && gradle wrapper --gradle-version 8.9 && ./gradlew :app:installDebug"
     echo
-    echo "4) Optional — poll condition from the device:"
+    echo "4) Reverse the API port into the emulator:"
     echo "     adb reverse tcp:8080 tcp:8080"
-    echo "     # then GET http://127.0.0.1:8080/devices/$DEVICE/condition inside the app/emulator"
     ;;
   Darwin)
-    echo "Platform: macOS — no native netns. Full shaping: Linux CI, Docker, or a Linux/WSL2 host."
+    echo "Platform: macOS — no native netns."
     echo
-    echo "On this Mac you can still:"
-    echo "  - Run ntnbox with --addr for API/GUI (Docker proxy for run, or ntnbox serve)"
-    echo "  - adb reverse tcp:8080 tcp:8080 and poll /devices/$DEVICE/condition"
+    echo "API + companion (no emulator traffic shaping on the host AVD):"
+    echo "  go build -o ntnbox ./cmd/ntnbox/"
+    echo "  # Long-lived Docker-backed run registers sandbox-0 + evaluator:"
+    echo "  ./ntnbox run --addr $ADDR --profile $PROFILE_PATH -- sleep 3600"
+    echo "  adb reverse tcp:8080 tcp:8080"
     echo
-    echo "For real delay/loss/coverage gaps, wrap the emulator on Linux/WSL2:"
+    echo "Do NOT use 'ntnbox serve' for /devices/$DEVICE/condition — serve does not"
+    echo "auto-register sandbox-0 or an evaluator (condition would 404)."
+    echo
+    echo "Full delay/loss/coverage on an emulator: use Linux, WSL2, or CI and wrap"
+    echo "the emulator process (Docker on Mac does not shape a host AVD):"
     echo "  sudo ./ntnbox run --addr $ADDR --profile $PROFILE_PATH -- emulator @MyAVD"
     echo
-    echo "Walkthrough: TUTORIAL.md → Step 11 (Android emulator)"
+    echo "Walkthrough: TUTORIAL.md → Step 11"
     ;;
   MINGW*|MSYS*|CYGWIN*|Windows_NT)
-    echo "Platform: Windows — no native netns. Prefer WSL2 for full shaping (same as Linux)."
+    echo "Platform: Windows — no native netns. Prefer WSL2 for full emulator shaping."
     echo
-    echo "Native Windows: API + adb reverse only."
+    echo "Native Windows: API via WSL2/Linux host + adb reverse (same as Mac API path)."
     echo "WSL2 wrap template:"
     echo "  sudo ./ntnbox run --addr $ADDR --profile $PROFILE_PATH -- emulator @MyAVD"
     echo
-    echo "Walkthrough: TUTORIAL.md → Step 11 (Android emulator)"
+    echo "Walkthrough: TUTORIAL.md → Step 11"
     ;;
   *)
-    echo "Platform: $OS — treat like macOS/Windows: use Linux/WSL2/CI for full shaping."
+    echo "Platform: $OS — use Linux/WSL2/CI for full emulator shaping."
     echo "Wrap template:"
     echo "  sudo ./ntnbox run --addr $ADDR --profile $PROFILE_PATH -- emulator @MyAVD"
     ;;

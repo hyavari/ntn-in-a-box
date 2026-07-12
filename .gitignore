@@ -31,6 +31,9 @@ vendor/
 samples/android-connectivity/.gradle/
 samples/android-connectivity/**/build/
 samples/android-connectivity/local.properties
+android/.gradle/
+android/**/build/
+android/local.properties
 
 
 # Session recordings

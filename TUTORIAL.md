@@ -235,10 +235,15 @@ available (no evaluator or profile loaded).
 
 ## Step 11: Test with an Android emulator
 
-Goal: feel NTN impairments from an Android app (retry + offline queue),
-and optionally poll ntnbox condition from the device.
+Goal: run an Android app against ntnbox in two layers:
 
-Print the command cheat-sheet anytime:
+1. **Traffic** (Linux / WSL2 / CI) — wrap the emulator so HTTP feels delay,
+   loss, and coverage gaps.
+2. **Signals** (every platform) — the app talks to the condition API /
+   coverage SSE via `adb reverse`, so it can show countdown and adapt
+   (retry, offline queue, flush on `window_opened`).
+
+Cheat-sheet for your machine anytime:
 
 ```bash
 ./scripts/demo-android.sh              # default: sos_burst
@@ -247,55 +252,96 @@ Print the command cheat-sheet anytime:
 
 ### Platform matrix
 
-| Platform | Full shaping (delay/loss/gaps) | API + GUI + `adb reverse` |
-|----------|--------------------------------|---------------------------|
-| Linux / WSL2 / CI | Yes — wrap emulator under `ntnbox run` | Yes |
-| macOS | Via Docker/CI/Linux host — not native netns | Yes |
-| Native Windows | Prefer WSL2 for wrap | Yes |
+| Platform | Full emulator shaping (delay/loss/gaps) | API + GUI + companion |
+|----------|-------------------------------------------|------------------------|
+| Linux / WSL2 / CI | Yes — wrap `emulator` under `ntnbox run` | Yes |
+| macOS | No on a host AVD — use Linux/WSL2/CI for shaping | Yes — Docker-backed `ntnbox run --addr … -- sleep …` |
+| Native Windows | Prefer WSL2 wrap | Yes (API host via WSL2/Linux) |
 
-Default device id when you pass `--addr`: **`sandbox-0`**.
+Device id with `run --addr`: **`sandbox-0`**. Do **not** use `ntnbox serve`
+for `/devices/sandbox-0/condition` — serve does not register that device or
+an evaluator (you'd get 404).
 
-### Linux / WSL2 (full shaping)
+### 1) Start ntnbox
+
+**Linux / WSL2 — shape emulator traffic + expose API:**
 
 ```bash
 go build -o ntnbox ./cmd/ntnbox/
 
-# Replace @MyAVD with your AVD name
+# Replace @MyAVD with your AVD name (`emulator -list-avds`)
 sudo ./ntnbox run --addr :8080 \
   --profile testdata/profiles/sos_burst.yaml \
   -- emulator @MyAVD
 ```
 
-In another terminal, build and install the sample:
+**macOS (or API-only anywhere) — signals without shaping the host AVD:**
+
+```bash
+go build -o ntnbox ./cmd/ntnbox/
+
+# Docker-backed on Mac; keeps sandbox-0 + evaluator alive
+./ntnbox run --addr :8080 \
+  --profile testdata/profiles/sos_burst.yaml \
+  -- sleep 3600
+```
+
+Open `http://localhost:8080/ui` for the live visualization. Confirm the API:
+
+```bash
+curl -s http://localhost:8080/devices/sandbox-0/condition
+```
+
+### 2) Build and install the sample
+
+JDK 17+ and Android SDK required. Android Studio → open
+`samples/android-connectivity/` → Run, **or** CLI:
 
 ```bash
 cd samples/android-connectivity
+# If ./gradlew is missing: gradle wrapper --gradle-version 8.9
 ./gradlew :app:installDebug
-# or open the folder in Android Studio and Run
 ```
 
-Optional — let the emulator reach the host API:
+The sample depends on the companion via Gradle `includeBuild("../../android")`.
+
+### 3) Bridge the emulator to the host API
 
 ```bash
 adb reverse tcp:8080 tcp:8080
-# GET http://127.0.0.1:8080/devices/sandbox-0/condition
 ```
 
-Watch the sample UI: during coverage gaps requests fail, the offline queue
-grows, then drains when connectivity returns. Open `http://localhost:8080/ui`
-for the live visualization.
+The app defaults to `http://127.0.0.1:8080` and device `sandbox-0`.
 
-### macOS / native Windows
+### 4) What you should see
 
-Use `./scripts/demo-android.sh` for the printed guidance. You can expose the
-API and use `adb reverse` for condition polling, but **real** delay/loss/
-coverage shaping needs Linux, WSL2, or CI wrapping the emulator as above.
+In [`samples/android-connectivity/`](samples/android-connectivity/):
 
-### Sample
+- HTTP every ~2s with retry + offline queue
+- Companion line: “available in Xs” / “next transition in Xs”
+- On coverage `window_opened`, the queue drains
+- Under a Linux wrap, gaps also *fail* HTTP for real; on Mac API-only, shaping
+  of the AVD path itself is skipped — countdown/SSE still work
 
-See [`samples/android-connectivity/`](samples/android-connectivity/) —
-connectivity-only (no companion library yet). Phase B will add in-app
-coverage callbacks.
+### Use the companion in your own app
+
+Library: [`android/ntnbox/`](android/ntnbox/) (details and Flow helpers in its
+README). Minimal wiring after `adb reverse`:
+
+```kotlin
+val client = NtnBoxClient() // http://127.0.0.1:8080 , sandbox-0
+client.addListener(mainExecutor, object : NtnBoxListener {
+    override fun onCoverageChanged(inCoverage: Boolean, kind: CoverageKind) { /* … */ }
+    override fun onCondition(condition: NtnCondition) { /* countdown / metrics */ }
+    override fun onConnectionChanged(connected: Boolean) { /* SSE up/down */ }
+})
+client.start()
+// …
+client.stop()
+```
+
+Enable cleartext HTTP to localhost (`android:usesCleartextTraffic="true"` or a
+network security config) — the sample already does.
 
 ## Patterns for NTN-aware apps
 

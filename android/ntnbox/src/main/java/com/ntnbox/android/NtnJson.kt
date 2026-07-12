@@ -1,0 +1,61 @@
+package com.ntnbox.android
+
+/**
+ * Pure JSON mappers for ntnbox wire formats (no Android org.json).
+ * Intentionally minimal — payloads are small and controlled by ntnbox.
+ */
+object NtnJson {
+    fun parseCondition(json: String): NtnCondition {
+        return NtnCondition(
+            inCoverage = requireBoolean(json, "in_coverage"),
+            elapsedSec = requireDouble(json, "elapsed_sec"),
+            untilNextTransitionSec = requireDouble(json, "until_next_transition_sec"),
+            delayMs = optionalDouble(json, "delay_ms"),
+            jitterMs = optionalDouble(json, "jitter_ms"),
+            lossPct = optionalDouble(json, "loss_pct"),
+            bandwidthKbps = optionalDouble(json, "bandwidth_kbps"),
+        )
+    }
+
+    data class CoveragePayload(
+        val kind: CoverageKind,
+        val inCoverage: Boolean,
+        val untilNextTransition: Double? = null,
+    )
+
+    fun parseCoverageEvent(json: String): CoveragePayload {
+        return CoveragePayload(
+            kind = CoverageKind.fromWire(optionalString(json, "kind")),
+            inCoverage = optionalBoolean(json, "in_coverage") ?: false,
+            untilNextTransition = optionalDouble(json, "until_next_transition"),
+        )
+    }
+
+    private fun requireBoolean(json: String, key: String): Boolean {
+        return optionalBoolean(json, key)
+            ?: throw IllegalArgumentException("missing boolean $key")
+    }
+
+    private fun requireDouble(json: String, key: String): Double {
+        return optionalDouble(json, key)
+            ?: throw IllegalArgumentException("missing number $key")
+    }
+
+    private fun optionalBoolean(json: String, key: String): Boolean? {
+        val re = Regex("\"${Regex.escape(key)}\"\\s*:\\s*(true|false)")
+        val m = re.find(json) ?: return null
+        return m.groupValues[1] == "true"
+    }
+
+    private fun optionalDouble(json: String, key: String): Double? {
+        val re = Regex("\"${Regex.escape(key)}\"\\s*:\\s*(-?\\d+(?:\\.\\d+)?(?:[eE][-+]?\\d+)?)")
+        val m = re.find(json) ?: return null
+        return m.groupValues[1].toDouble()
+    }
+
+    private fun optionalString(json: String, key: String): String? {
+        val re = Regex("\"${Regex.escape(key)}\"\\s*:\\s*\"([^\"]*)\"")
+        val m = re.find(json) ?: return null
+        return m.groupValues[1]
+    }
+}

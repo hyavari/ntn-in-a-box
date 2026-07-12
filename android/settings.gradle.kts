@@ -14,11 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "android-connectivity"
-include(":app")
-
-includeBuild("../../android") {
-    dependencySubstitution {
-        substitute(module("com.ntnbox:ntnbox")).using(project(":ntnbox"))
-    }
-}
+rootProject.name = "ntnbox-android"
+include(":ntnbox")

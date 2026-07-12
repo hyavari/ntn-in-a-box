@@ -14,6 +14,14 @@
         android:textStyle="bold" />
 
     <TextView
+        android:id="@+id/ntnText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="ntnbox: connecting…"
+        android:textSize="14sp" />
+
+    <TextView
         android:id="@+id/detailText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -25,6 +33,6 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="24dp"
-        android:text="Connectivity-only demo: retry + offline queue. No companion library yet."
+        android:text="HTTP retry + offline queue, plus ntnbox companion coverage/countdown."
         android:textSize="12sp" />
 </LinearLayout>

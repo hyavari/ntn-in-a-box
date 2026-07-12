@@ -31,6 +31,7 @@ class OfflineQueue(
 
     fun onFailure(nowMs: Long = System.currentTimeMillis()) {
         consecutiveFailures += 1
+        // First failure → 2s, then 4s, 8s, … capped at maxBackoffMs.
         val exp = (1L shl consecutiveFailures.coerceAtMost(10).coerceAtLeast(1))
         val backoff = (1000L * exp).coerceAtMost(maxBackoffMs)
         nextAttemptAtMs = nowMs + backoff
