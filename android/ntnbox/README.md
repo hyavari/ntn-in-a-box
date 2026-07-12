@@ -1,8 +1,8 @@
 # ntnbox Android companion
 
-Client library for NTN-in-a-Box coverage, condition, and lookahead signals.
+Client library for NTN-in-a-Box coverage, condition, lookahead, and link-state signals.
 
-- SSE: `GET /events` (coverage kinds) — long-lived; uses no read timeout
+- SSE: `GET /events` — coverage kinds + optional `linkstate`
 - Poll: `GET /devices/{id}/condition` (countdown + link metrics)
 - Poll: `GET /devices/{id}/lookahead` (absolute open/close, duration, elev)
 - Callbacks + optional Kotlin Flow wrappers
@@ -47,6 +47,7 @@ client.addListener(mainExecutor, object : NtnBoxListener {
     override fun onCoverageChanged(inCoverage: Boolean, kind: CoverageKind) { /* … */ }
     override fun onCondition(condition: NtnCondition) { /* countdown */ }
     override fun onLookahead(lookahead: NtnLookahead) { /* open/close / duration */ }
+    override fun onLinkState(linkState: NtnLinkState) { /* throttled metrics */ }
     override fun onConnectionChanged(connected: Boolean) { /* SSE up/down */ }
 })
 client.start()
@@ -54,8 +55,9 @@ client.start()
 client.stop()
 ```
 
-Flow helpers (`coverageFlow()`, `conditionFlow()`, `connectionFlow()`) do **not**
-call `start()` — start the client first.
+Flow helpers (`coverageFlow()`, `conditionFlow()`, `lookaheadFlow()`,
+`linkStateFlow()`, `connectionFlow()`) do **not** call `start()` — start the
+client first.
 
 End-to-end emulator walkthrough: [TUTORIAL.md Step 11](../../TUTORIAL.md#step-11-test-with-an-android-emulator).
 Sample app: `samples/android-connectivity/`.

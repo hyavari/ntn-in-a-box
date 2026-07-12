@@ -5,10 +5,12 @@
 // The client runs INSIDE ntnbox and experiences NTN conditions.
 //
 // Usage:
-//   go run samples/go-messenger/server/main.go
+//
+//	go run samples/go-messenger/server/main.go
 //
 // Then in another terminal:
-//   ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- go run samples/go-messenger/client/main.go
+//
+//	ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- go run samples/go-messenger/client/main.go
 package main
 
 import (
@@ -22,10 +24,10 @@ import (
 var messageCount atomic.Int64
 
 type message struct {
-	ID      int    `json:"id"`
-	From    string `json:"from"`
-	Text    string `json:"text"`
-	SentAt  string `json:"sent_at"`
+	ID     int    `json:"id"`
+	From   string `json:"from"`
+	Text   string `json:"text"`
+	SentAt string `json:"sent_at"`
 }
 
 type response struct {

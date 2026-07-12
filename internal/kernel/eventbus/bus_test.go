@@ -271,7 +271,6 @@ func TestUnsubscribe_CalledTwiceIsSafe(t *testing.T) {
 	unsub() // second call should not panic
 }
 
-
 func TestPublishSatellitePosition(t *testing.T) {
 	b := New(DefaultLinkStateThrottle)
 

@@ -15,9 +15,9 @@ import (
 // Replayer reads a JSONL recording and publishes events to the bus
 // with original timing (scaled by Speed).
 type Replayer struct {
-	path  string
-	bus   *eventbus.Bus
-	speed float64 // 1.0 = real time, 10.0 = 10x faster
+	path       string
+	bus        *eventbus.Bus
+	speed      float64                            // 1.0 = real time, 10.0 = 10x faster
 	onProgress func(elapsed, total time.Duration) // optional progress callback
 }
 

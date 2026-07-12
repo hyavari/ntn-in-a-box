@@ -90,7 +90,6 @@ func TestRecorder_WritesEvents(t *testing.T) {
 	}
 }
 
-
 func TestReplayer_PublishesInOrder(t *testing.T) {
 	// Write a test recording.
 	path := filepath.Join(t.TempDir(), "replay.jsonl")

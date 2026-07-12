@@ -13,16 +13,16 @@ import (
 
 // sseEvent is the JSON payload for an SSE event.
 type sseCoverageEvent struct {
-	Kind                   string   `json:"kind"`
-	InCoverage             bool     `json:"in_coverage"`
-	ElapsedSec             float64  `json:"elapsed_sec"`
-	UntilNextTransition    float64  `json:"until_next_transition"`
-	At                     string   `json:"at"`
-	LookaheadSec           *float64 `json:"lookahead_sec,omitempty"`
-	NextOpenAt             *string  `json:"next_open_at,omitempty"`
-	NextCloseAt            *string  `json:"next_close_at,omitempty"`
-	NextWindowDurationSec  *float64 `json:"next_window_duration_sec,omitempty"`
-	MaxElevationDeg        *float64 `json:"max_elevation_deg,omitempty"`
+	Kind                  string   `json:"kind"`
+	InCoverage            bool     `json:"in_coverage"`
+	ElapsedSec            float64  `json:"elapsed_sec"`
+	UntilNextTransition   float64  `json:"until_next_transition"`
+	At                    string   `json:"at"`
+	LookaheadSec          *float64 `json:"lookahead_sec,omitempty"`
+	NextOpenAt            *string  `json:"next_open_at,omitempty"`
+	NextCloseAt           *string  `json:"next_close_at,omitempty"`
+	NextWindowDurationSec *float64 `json:"next_window_duration_sec,omitempty"`
+	MaxElevationDeg       *float64 `json:"max_elevation_deg,omitempty"`
 }
 
 type sseLinkStateEvent struct {

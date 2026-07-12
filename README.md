@@ -190,18 +190,21 @@ The GUI is embedded in the binary — no separate server or files needed.
 ### Query the kernel API (any platform)
 
 ```bash
+# Auto-registers sandbox-0 + condition/lookahead/events (no netns shaping)
 ./ntnbox serve --profile testdata/profiles/leo_pass_90s.yaml
 
-# Register a virtual UE device
+curl http://localhost:8080/devices/sandbox-0/condition
+curl http://localhost:8080/devices/sandbox-0/lookahead
+curl http://localhost:8080/devices/sandbox-0/capabilities
+
+# Legacy: API only — register devices yourself
+./ntnbox serve --no-device --profile testdata/profiles/leo_pass_90s.yaml
 curl -X POST http://localhost:8080/devices \
   -H "Content-Type: application/json" \
   -d '{"id":"ue-1","type":"virtual_ue","profile_name":"leo_pass_90s"}'
-
-# Query its current NTN condition
-curl http://localhost:8080/devices/ue-1/condition
-# {"in_coverage":true,"elapsed_sec":2.3,"until_next_transition_sec":87.7,
-#  "delay_ms":135.6,"jitter_ms":28.3,"loss_pct":7.1,"bandwidth_kbps":4400}
 ```
+
+Adaptation patterns (queue flush, burst gates, lead_sec): [COOKBOOK.md](COOKBOOK.md).
 
 ## TLE reference
 

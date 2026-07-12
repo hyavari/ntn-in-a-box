@@ -8,10 +8,12 @@
 // - Shows per-message latency
 //
 // Run under ntnbox:
-//   ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- go run samples/go-messenger/client/main.go
+//
+//	ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- go run samples/go-messenger/client/main.go
 //
 // Make sure the server is running first:
-//   go run samples/go-messenger/server/main.go
+//
+//	go run samples/go-messenger/server/main.go
 package main
 
 import (
@@ -35,19 +37,19 @@ const (
 )
 
 type message struct {
-	ID   int    `json:"id"`
-	From string `json:"from"`
-	Text string `json:"text"`
+	ID     int    `json:"id"`
+	From   string `json:"from"`
+	Text   string `json:"text"`
 	SentAt string `json:"sent_at"`
 }
 
 // State tracking.
 var (
-	mu       sync.Mutex
-	queue    []message
-	msgID    int
-	online   = true
-	stats    = struct{ sent, failed, queued, flushed int }{}
+	mu     sync.Mutex
+	queue  []message
+	msgID  int
+	online = true
+	stats  = struct{ sent, failed, queued, flushed int }{}
 )
 
 // Colors.

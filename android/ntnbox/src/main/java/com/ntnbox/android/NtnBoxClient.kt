@@ -152,6 +152,23 @@ class NtnBoxClient(
         awaitClose { removeListener(listener) }
     }
 
+    /** Flow of SSE link-state snapshots. Does not call [start]. */
+    fun linkStateFlow(): Flow<NtnLinkState> = callbackFlow {
+        val listener = object : NtnBoxListener {
+            override fun onCoverageChanged(inCoverage: Boolean, kind: CoverageKind) = Unit
+
+            override fun onCondition(condition: NtnCondition) = Unit
+
+            override fun onLinkState(linkState: NtnLinkState) {
+                trySend(linkState)
+            }
+
+            override fun onConnectionChanged(connected: Boolean) = Unit
+        }
+        addListener(Executor { it.run() }, listener)
+        awaitClose { removeListener(listener) }
+    }
+
     /** Flow of SSE connection up/down. Does not call [start]. */
     fun connectionFlow(): Flow<Boolean> = callbackFlow {
         val listener = object : NtnBoxListener {
@@ -188,12 +205,23 @@ class NtnBoxClient(
                 data: String,
             ) {
                 if (!started.get()) return
-                if (type != null && type != "coverage") return
-                try {
-                    val payload = NtnJson.parseCoverageEvent(data)
-                    dispatchCoverage(payload.inCoverage, payload.kind)
-                } catch (_: Exception) {
-                    // ignore malformed event
+                when (type) {
+                    null, "coverage" -> {
+                        try {
+                            val payload = NtnJson.parseCoverageEvent(data)
+                            dispatchCoverage(payload.inCoverage, payload.kind)
+                        } catch (_: Exception) {
+                            // ignore malformed event
+                        }
+                    }
+                    "linkstate" -> {
+                        try {
+                            dispatchLinkState(NtnJson.parseLinkState(data))
+                        } catch (_: Exception) {
+                            // ignore malformed event
+                        }
+                    }
+                    else -> Unit
                 }
             }
 
@@ -323,6 +351,17 @@ class NtnBoxClient(
             reg.executor.execute {
                 if (started.get()) {
                     reg.listener.onLookahead(lookahead)
+                }
+            }
+        }
+    }
+
+    private fun dispatchLinkState(linkState: NtnLinkState) {
+        if (!started.get()) return
+        for (reg in listeners) {
+            reg.executor.execute {
+                if (started.get()) {
+                    reg.listener.onLinkState(linkState)
                 }
             }
         }

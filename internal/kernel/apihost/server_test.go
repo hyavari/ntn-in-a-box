@@ -422,9 +422,9 @@ func TestEnrichLookaheadCoverage_Opening(t *testing.T) {
 			Mode: profile.ModePeriodic, PeriodSec: 100, WindowSec: 20, LookaheadSec: 10,
 		},
 		Curves: profile.Curves{
-			DelayMs: []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
-			JitterMs: []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
-			LossPct: []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
+			DelayMs:       []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
+			JitterMs:      []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
+			LossPct:       []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
 			BandwidthKbps: []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
 		},
 	}
@@ -459,9 +459,9 @@ func TestSSE_LookaheadEnrichmentOnOpening(t *testing.T) {
 			Mode: profile.ModePeriodic, PeriodSec: 100, WindowSec: 20, LookaheadSec: 10,
 		},
 		Curves: profile.Curves{
-			DelayMs: []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
-			JitterMs: []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
-			LossPct: []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
+			DelayMs:       []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
+			JitterMs:      []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
+			LossPct:       []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
 			BandwidthKbps: []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
 		},
 	}
@@ -671,7 +671,6 @@ func TestUI_RedirectsFromUI(t *testing.T) {
 	}
 }
 
-
 func TestCapabilities_ReturnsDeviceCapabilities(t *testing.T) {
 	_, ts := testServer(t)
 	defer ts.Close()
@@ -699,10 +698,13 @@ func TestCapabilities_ReturnsDeviceCapabilities(t *testing.T) {
 	}
 
 	var caps struct {
-		Data             bool    `json:"data"`
-		CoverageMode     string  `json:"coverage_mode"`
-		MaxBandwidthKbps float64 `json:"max_bandwidth_kbps"`
-		SupportsPrediction bool  `json:"supports_prediction"`
+		Data               bool    `json:"data"`
+		CoverageMode       string  `json:"coverage_mode"`
+		MaxBandwidthKbps   float64 `json:"max_bandwidth_kbps"`
+		SupportsPrediction bool    `json:"supports_prediction"`
+		Messaging          bool    `json:"messaging"`
+		SOS                bool    `json:"sos"`
+		StoreAndForward    bool    `json:"store_and_forward"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&caps); err != nil {
 		t.Fatal(err)
@@ -720,6 +722,58 @@ func TestCapabilities_ReturnsDeviceCapabilities(t *testing.T) {
 	if !caps.SupportsPrediction {
 		t.Error("supports_prediction should be true")
 	}
+	if caps.Messaging || caps.SOS || caps.StoreAndForward {
+		t.Error("leo_pass_90s should not advertise messaging/sos/store_and_forward")
+	}
+}
+
+func TestCapabilities_SOSProfile(t *testing.T) {
+	p := &profile.Profile{
+		Name: "sos_burst",
+		Schedule: profile.Schedule{
+			Mode: profile.ModePeriodic, PeriodSec: 480, WindowSec: 15, LookaheadSec: 20,
+		},
+		Curves: profile.Curves{
+			DelayMs:       []profile.Point{{OffsetSec: 0, Value: 350}, {OffsetSec: 15, Value: 400}},
+			JitterMs:      []profile.Point{{OffsetSec: 0, Value: 80}, {OffsetSec: 15, Value: 80}},
+			LossPct:       []profile.Point{{OffsetSec: 0, Value: 25}, {OffsetSec: 15, Value: 30}},
+			BandwidthKbps: []profile.Point{{OffsetSec: 0, Value: 8}, {OffsetSec: 15, Value: 16}},
+		},
+	}
+	srv := New(Config{
+		Profiles: []*profile.Profile{p},
+		Registry: device.NewRegistry(),
+	})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	body := `{"id":"sos-1","type":"virtual_ue","profile_name":"sos_burst"}`
+	resp, err := http.Post(ts.URL+"/devices", "application/json", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	resp, err = http.Get(ts.URL + "/devices/sos-1/capabilities")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	var caps struct {
+		Messaging       bool `json:"messaging"`
+		SOS             bool `json:"sos"`
+		StoreAndForward bool `json:"store_and_forward"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&caps); err != nil {
+		t.Fatal(err)
+	}
+	if !caps.Messaging || !caps.SOS {
+		t.Errorf("sos_burst caps = %+v, want messaging+sos true", caps)
+	}
+	if caps.StoreAndForward {
+		t.Error("store_and_forward still unimplemented")
+	}
 }
 
 func TestCapabilities_NotFound(t *testing.T) {
@@ -736,7 +790,6 @@ func TestCapabilities_NotFound(t *testing.T) {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
 	}
 }
-
 
 func TestSSE_ForwardsReplayDone(t *testing.T) {
 	bus := newTestBus()

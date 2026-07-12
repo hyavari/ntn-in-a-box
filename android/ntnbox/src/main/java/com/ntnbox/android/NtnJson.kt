@@ -43,6 +43,16 @@ object NtnJson {
         )
     }
 
+    fun parseLinkState(json: String): NtnLinkState {
+        return NtnLinkState(
+            delayMs = requireDouble(json, "delay_ms"),
+            jitterMs = requireDouble(json, "jitter_ms"),
+            lossPct = requireDouble(json, "loss_pct"),
+            bandwidthKbps = requireDouble(json, "bandwidth_kbps"),
+            at = optionalString(json, "at"),
+        )
+    }
+
     private fun requireBoolean(json: String, key: String): Boolean {
         return optionalBoolean(json, key)
             ?: throw IllegalArgumentException("missing boolean $key")

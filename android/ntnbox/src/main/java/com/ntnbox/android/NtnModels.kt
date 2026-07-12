@@ -27,6 +27,17 @@ data class NtnLookahead(
 )
 
 /**
+ * Throttled link metrics from SSE event: linkstate.
+ */
+data class NtnLinkState(
+    val delayMs: Double,
+    val jitterMs: Double,
+    val lossPct: Double,
+    val bandwidthKbps: Double,
+    val at: String? = null,
+)
+
+/**
  * Coverage event kinds from SSE event: coverage (matches ntnbox bus).
  */
 enum class CoverageKind {

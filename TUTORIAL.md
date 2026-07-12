@@ -261,9 +261,9 @@ Cheat-sheet for your machine anytime:
 | macOS | No on a host AVD — use Linux/WSL2/CI for shaping | Yes — Docker-backed `ntnbox run --addr … -- sleep …` |
 | Native Windows | Prefer WSL2 wrap | Yes (API host via WSL2/Linux) |
 
-Device id with `run --addr`: **`sandbox-0`**. Do **not** use `ntnbox serve`
-for `/devices/sandbox-0/condition` — serve does not register that device or
-an evaluator (you'd get 404).
+Device id for `run --addr` and default `serve`: **`sandbox-0`**.
+Use `ntnbox serve --no-device` only if you will `POST /devices` yourself
+(legacy API-only mode).
 
 ### 1) Start ntnbox
 
@@ -283,7 +283,10 @@ sudo ./ntnbox run --addr :8080 \
 ```bash
 go build -o ntnbox ./cmd/ntnbox/
 
-# Docker-backed on Mac; keeps sandbox-0 + evaluator alive
+# Option A: serve (no netns; auto-registers sandbox-0 + evaluator)
+./ntnbox serve --profile testdata/profiles/sos_burst.yaml
+
+# Option B: Docker-backed run (same API; useful when you want run parity)
 ./ntnbox run --addr :8080 \
   --profile testdata/profiles/sos_burst.yaml \
   -- sleep 3600

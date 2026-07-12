@@ -85,6 +85,20 @@ class NtnJsonTest {
     }
 
     @Test
+    fun parseLinkState() {
+        val json = """
+            {"delay_ms":250.0,"jitter_ms":40.0,"loss_pct":8.0,
+             "bandwidth_kbps":16.0,"at":"2026-07-12T05:00:00Z"}
+        """.trimIndent()
+        val ls = NtnJson.parseLinkState(json)
+        assertEquals(250.0, ls.delayMs, 0.001)
+        assertEquals(40.0, ls.jitterMs, 0.001)
+        assertEquals(8.0, ls.lossPct, 0.001)
+        assertEquals(16.0, ls.bandwidthKbps, 0.001)
+        assertEquals("2026-07-12T05:00:00Z", ls.at)
+    }
+
+    @Test
     fun parseConditionMissingFieldThrows() {
         try {
             NtnJson.parseCondition("""{"in_coverage":true,"elapsed_sec":1.0}""")

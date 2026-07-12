@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -44,9 +45,9 @@ type Server struct {
 type Config struct {
 	Profiles    []*profile.Profile
 	Registry    *device.Registry
-	Bus         *eventbus.Bus    // optional; if nil, /events returns 503
-	Evaluator   condition.Eval   // optional; used by SSE to enrich coverage events
-	SessionInfo *SessionInfo     // optional; sent to GUI on SSE connect
+	Bus         *eventbus.Bus  // optional; if nil, /events returns 503
+	Evaluator   condition.Eval // optional; used by SSE to enrich coverage events
+	SessionInfo *SessionInfo   // optional; sent to GUI on SSE connect
 }
 
 // New creates a Server with the given config and returns it ready to
@@ -344,14 +345,14 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 type capabilitiesResponse struct {
-	Messaging       bool    `json:"messaging"`
-	StoreAndForward bool    `json:"store_and_forward"`
-	SOS             bool    `json:"sos"`
-	Voice           bool    `json:"voice"`
-	Data            bool    `json:"data"`
-	CoverageMode    string  `json:"coverage_mode"`
-	MaxBandwidthKbps float64 `json:"max_bandwidth_kbps"`
-	SupportsPrediction bool `json:"supports_prediction"`
+	Messaging          bool    `json:"messaging"`
+	StoreAndForward    bool    `json:"store_and_forward"`
+	SOS                bool    `json:"sos"`
+	Voice              bool    `json:"voice"`
+	Data               bool    `json:"data"`
+	CoverageMode       string  `json:"coverage_mode"`
+	MaxBandwidthKbps   float64 `json:"max_bandwidth_kbps"`
+	SupportsPrediction bool    `json:"supports_prediction"`
 }
 
 func (s *Server) handleGetCapabilities(w http.ResponseWriter, r *http.Request) {
@@ -377,15 +378,21 @@ func (s *Server) handleGetCapabilities(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Profile-aware capability flags (honest about what this sandbox
+	// models today — not about unimplemented messaging modules).
+	name := p.Name
+	sos := strings.HasPrefix(name, "sos_")
+	messaging := sos || strings.HasPrefix(name, "d2c_")
+
 	resp := capabilitiesResponse{
-		Messaging:        false, // not yet implemented
-		StoreAndForward:  false, // not yet implemented
-		SOS:              false, // not yet implemented
-		Voice:            false, // not yet implemented
-		Data:             true,  // always available (Dev Sandbox shapes data)
-		CoverageMode:     string(p.Schedule.Mode),
-		MaxBandwidthKbps: maxBw,
-		SupportsPrediction: true, // evaluator can predict future state
+		Messaging:          messaging, // profile is messaging-oriented (D2C/SOS)
+		StoreAndForward:    false,     // server module not shipped yet
+		SOS:                sos,
+		Voice:              false,
+		Data:               true,
+		CoverageMode:       string(p.Schedule.Mode),
+		MaxBandwidthKbps:   maxBw,
+		SupportsPrediction: true,
 	}
 
 	writeJSON(w, http.StatusOK, resp)

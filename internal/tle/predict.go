@@ -310,7 +310,6 @@ func tleEpoch(line1 string) (time.Time, error) {
 	return epochTime, nil
 }
 
-
 // ComputeOrbitPoints propagates the satellite for one full orbital
 // revolution and returns ~200 geodetic points [lat, lon, alt].
 // Used by the GUI to render the orbit track on a globe.

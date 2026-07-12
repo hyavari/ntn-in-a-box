@@ -60,12 +60,12 @@ type Model struct {
 	exitCode  int
 
 	// Replay mode state.
-	isReplay       bool
-	replayElapsed  time.Duration
-	replayTotal    time.Duration
-	replayDone     bool
-	replayErr      error // non-nil if replay failed
-	replayAgain    bool  // set when user chooses to replay again
+	isReplay      bool
+	replayElapsed time.Duration
+	replayTotal   time.Duration
+	replayDone    bool
+	replayErr     error // non-nil if replay failed
+	replayAgain   bool  // set when user chooses to replay again
 
 	// API address (for displaying GUI URL).
 	addr string

@@ -12,6 +12,9 @@ interface NtnBoxListener {
 
     fun onLookahead(lookahead: NtnLookahead) {}
 
+    /** Optional; SSE `linkstate` (throttled delay/jitter/loss/bandwidth). */
+    fun onLinkState(linkState: NtnLinkState) {}
+
     /** SSE session connected (true) or dropped / stopped (false). */
     fun onConnectionChanged(connected: Boolean)
 }

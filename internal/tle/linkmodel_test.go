@@ -74,10 +74,10 @@ func TestInterpolate_Above90(t *testing.T) {
 func TestLinkModel_Validate(t *testing.T) {
 	// Empty curve.
 	m := LinkModel{
-		Name:       "bad",
-		DelayMs:    nil,
-		JitterMs:   []ModelPoint{{10, 5}},
-		LossPct:    []ModelPoint{{10, 1}},
+		Name:          "bad",
+		DelayMs:       nil,
+		JitterMs:      []ModelPoint{{10, 5}},
+		LossPct:       []ModelPoint{{10, 1}},
 		BandwidthKbps: []ModelPoint{{10, 1000}},
 	}
 	if err := m.Validate(); err == nil {
@@ -86,10 +86,10 @@ func TestLinkModel_Validate(t *testing.T) {
 
 	// Unsorted curve.
 	m2 := LinkModel{
-		Name:       "bad",
-		DelayMs:    []ModelPoint{{30, 60}, {10, 150}}, // wrong order
-		JitterMs:   []ModelPoint{{10, 5}},
-		LossPct:    []ModelPoint{{10, 1}},
+		Name:          "bad",
+		DelayMs:       []ModelPoint{{30, 60}, {10, 150}}, // wrong order
+		JitterMs:      []ModelPoint{{10, 5}},
+		LossPct:       []ModelPoint{{10, 1}},
 		BandwidthKbps: []ModelPoint{{10, 1000}},
 	}
 	if err := m2.Validate(); err == nil {
