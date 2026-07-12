@@ -12,12 +12,14 @@ see NTN effects in action.
 | [node-retry/](node-retry/) | Node.js | Exponential backoff + offline queue | No* |
 | [python-adaptive/](python-adaptive/) | Python | Latency-based state detection + store-and-forward | No* |
 | [go-messenger/](go-messenger/) | Go | Client/server messaging with queue flush | Yes (cross-compiled + bind-mount) |
+| [android-connectivity/](android-connectivity/) | Android | Retry + offline queue (emulator / Mobile DX) | No — see Tutorial Step 11 |
 
 *Node.js and Python samples require their runtimes installed. The Docker
 image only contains `ntnbox` and `poller`. Shell and Go samples work on
 macOS because the demo script cross-compiles Go binaries for Linux and
 the Darwin proxy bind-mounts local files (prefixed with `./`) into the
-container.
+container. Android sample: Linux/WSL2 wrap for full shaping; see
+`../TUTORIAL.md` Step 11 and `../scripts/demo-android.sh`.
 
 ## Quick start
 

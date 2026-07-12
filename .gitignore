@@ -27,6 +27,11 @@ vendor/
 .vscode/
 .superpowers/
 
+# Android sample build outputs
+samples/android-connectivity/.gradle/
+samples/android-connectivity/**/build/
+samples/android-connectivity/local.properties
+
 
 # Session recordings
 *.jsonl

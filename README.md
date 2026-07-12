@@ -299,6 +299,7 @@ under NTN conditions:
 | `samples/node-retry/` | Node.js | Exponential backoff + offline queue |
 | `samples/python-adaptive/` | Python | Latency-based state detection + store-and-forward |
 | `samples/go-messenger/` | Go | Client/server messaging with queue flush |
+| `samples/android-connectivity/` | Android | Retry + offline queue (emulator / Mobile DX) |
 
 ```bash
 # Via demo script (builds Docker, easiest on macOS):
@@ -309,6 +310,9 @@ under NTN conditions:
 ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- ./samples/curl-demo.sh
 ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- node samples/node-retry/index.js
 ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- python3 samples/python-adaptive/client.py
+
+# Android Mobile DX helper (prints commands; see Tutorial Step 11):
+./scripts/demo-android.sh sos_burst
 ```
 
 The Docker image includes only Go binaries (ntnbox + poller) and curl.
@@ -319,6 +323,13 @@ native). Shell and Go samples work on macOS via the Docker proxy
 No code changes needed in your app — ntnbox shapes the network
 transparently at the OS level. See [TUTORIAL.md](TUTORIAL.md) for a
 step-by-step walkthrough.
+
+### Mobile / Android
+
+For emulator workflows (Linux/WSL2 wrap, macOS/Windows limits, sample app),
+see [TUTORIAL.md — Step 11](TUTORIAL.md#step-11-test-with-an-android-emulator),
+`./scripts/demo-android.sh`, and `samples/android-connectivity/`.
+Full traffic shaping needs Linux, WSL2, or CI — not native macOS/Windows netns.
 
 ## GitHub Action
 

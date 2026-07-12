@@ -25,8 +25,10 @@ func startAPIHost(addr string, bus *eventbus.Bus, registry *device.Registry, eva
 		srv.RegisterEvaluator("sandbox-0", eval)
 	}
 	go func() {
-		fmt.Fprintf(os.Stderr, "ntnbox: API listening on %s\n", addr)
-		fmt.Fprintf(os.Stderr, "ntnbox: GUI available at http://localhost:%s/ui\n", addrPort(addr))
+		port := addrPort(addr)
+		fmt.Fprintf(os.Stderr, "ntnbox: API listening on %s  device=sandbox-0\n", addr)
+		fmt.Fprintf(os.Stderr, "ntnbox: GUI available at http://localhost:%s/ui\n", port)
+		fmt.Fprintf(os.Stderr, "ntnbox: condition GET http://localhost:%s/devices/sandbox-0/condition\n", port)
 		_ = srv.ListenAndServe(addr)
 	}()
 	return srv

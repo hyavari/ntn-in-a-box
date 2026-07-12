@@ -233,6 +233,70 @@ This lets your app adapt in real time based on satellite state.
 normally, but `/devices/{id}/condition` and `/capabilities` are not
 available (no evaluator or profile loaded).
 
+## Step 11: Test with an Android emulator
+
+Goal: feel NTN impairments from an Android app (retry + offline queue),
+and optionally poll ntnbox condition from the device.
+
+Print the command cheat-sheet anytime:
+
+```bash
+./scripts/demo-android.sh              # default: sos_burst
+./scripts/demo-android.sh leo_pass_90s
+```
+
+### Platform matrix
+
+| Platform | Full shaping (delay/loss/gaps) | API + GUI + `adb reverse` |
+|----------|--------------------------------|---------------------------|
+| Linux / WSL2 / CI | Yes — wrap emulator under `ntnbox run` | Yes |
+| macOS | Via Docker/CI/Linux host — not native netns | Yes |
+| Native Windows | Prefer WSL2 for wrap | Yes |
+
+Default device id when you pass `--addr`: **`sandbox-0`**.
+
+### Linux / WSL2 (full shaping)
+
+```bash
+go build -o ntnbox ./cmd/ntnbox/
+
+# Replace @MyAVD with your AVD name
+sudo ./ntnbox run --addr :8080 \
+  --profile testdata/profiles/sos_burst.yaml \
+  -- emulator @MyAVD
+```
+
+In another terminal, build and install the sample:
+
+```bash
+cd samples/android-connectivity
+./gradlew :app:installDebug
+# or open the folder in Android Studio and Run
+```
+
+Optional — let the emulator reach the host API:
+
+```bash
+adb reverse tcp:8080 tcp:8080
+# GET http://127.0.0.1:8080/devices/sandbox-0/condition
+```
+
+Watch the sample UI: during coverage gaps requests fail, the offline queue
+grows, then drains when connectivity returns. Open `http://localhost:8080/ui`
+for the live visualization.
+
+### macOS / native Windows
+
+Use `./scripts/demo-android.sh` for the printed guidance. You can expose the
+API and use `adb reverse` for condition polling, but **real** delay/loss/
+coverage shaping needs Linux, WSL2, or CI wrapping the emulator as above.
+
+### Sample
+
+See [`samples/android-connectivity/`](samples/android-connectivity/) —
+connectivity-only (no companion library yet). Phase B will add in-app
+coverage callbacks.
+
 ## Patterns for NTN-aware apps
 
 | Pattern                                  | When to use                                              |
@@ -248,6 +312,7 @@ available (no evaluator or profile loaded).
 
 - Try different profiles (`geo_steady`, `d2c_burst`, `sos_burst`) to see how
   your app handles different satellite architectures
+- Follow [Step 11](#step-11-test-with-an-android-emulator) for Android emulator testing
 - Build a custom profile that matches your target constellation
 - Use the `--addr` API to build satellite-aware features in your app
 - Check the [API reference](README.md#api-reference) for all endpoints
