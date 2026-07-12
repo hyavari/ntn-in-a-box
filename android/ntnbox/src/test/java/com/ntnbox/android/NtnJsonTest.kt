@@ -32,15 +32,17 @@ class NtnJsonTest {
     @Test
     fun parseCoverageEventKinds() {
         val opened = NtnJson.parseCoverageEvent(
-            """{"kind":"window_opened","in_coverage":true,"until_next_transition":14.0}""",
+            """{"kind":"window_opened","in_coverage":true,"until_next_transition":14.0,"device_id":"sandbox-1"}""",
         )
         assertEquals(CoverageKind.WINDOW_OPENED, opened.kind)
         assertTrue(opened.inCoverage)
+        assertEquals("sandbox-1", opened.deviceId)
 
         val closing = NtnJson.parseCoverageEvent(
             """{"kind":"window_closing","in_coverage":true}""",
         )
         assertEquals(CoverageKind.WINDOW_CLOSING, closing.kind)
+        assertNull(closing.deviceId)
     }
 
     @Test
@@ -96,6 +98,28 @@ class NtnJsonTest {
         assertEquals(8.0, ls.lossPct, 0.001)
         assertEquals(16.0, ls.bandwidthKbps, 0.001)
         assertEquals("2026-07-12T05:00:00Z", ls.at)
+    }
+
+    @Test
+    fun parseMessageAndList() {
+        val one = NtnJson.parseMessage(
+            """{"id":"msg-1","from":"sandbox-0","to":"cloud","status":"delivered","body":"SOS"}""",
+        )
+        assertEquals("msg-1", one.id)
+        assertEquals("delivered", one.status)
+        assertEquals("SOS", one.body)
+
+        val list = NtnJson.parseMessageList(
+            """[{"id":"msg-1","status":"delivered"},{"id":"msg-2","status":"queued"}]""",
+        )
+        assertEquals(2, list.size)
+        assertEquals("msg-2", list[1].id)
+
+        val braced = NtnJson.parseMessageList(
+            """[{"id":"msg-1","status":"delivered","body":"see {x} and \"y\""}]""",
+        )
+        assertEquals(1, braced.size)
+        assertEquals("see {x} and \"y\"", braced[0].body)
     }
 
     @Test

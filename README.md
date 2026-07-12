@@ -191,6 +191,7 @@ The GUI is embedded in the binary — no separate server or files needed.
 
 ```bash
 # Auto-registers sandbox-0 + condition/lookahead/events (no netns shaping)
+# Default listen: 127.0.0.1:8080 (use --addr 0.0.0.0:8080 for LAN)
 ./ntnbox serve --profile testdata/profiles/leo_pass_90s.yaml
 
 curl http://localhost:8080/devices/sandbox-0/condition
@@ -204,7 +205,7 @@ curl -X POST http://localhost:8080/devices \
   -d '{"id":"ue-1","type":"virtual_ue","profile_name":"leo_pass_90s"}'
 ```
 
-Adaptation patterns (queue flush, burst gates, lead_sec): [COOKBOOK.md](COOKBOOK.md).
+Adaptation patterns (queue flush, burst gates, lead_sec, store-and-forward): [COOKBOOK.md](COOKBOOK.md).
 
 ## TLE reference
 
@@ -539,8 +540,11 @@ outages via timeouts, which is exactly what NTN-aware apps need to handle.
 | GET | `/devices/{id}/condition` | Current coverage + link state |
 | GET | `/devices/{id}/lookahead` | Next open/close times, window duration, elev (TLE); `?lead_sec=` advisory |
 | GET | `/devices/{id}/capabilities` | Satellite capability discovery |
+| POST | `/devices/{id}/messages` | Store-and-forward send (`to`: `cloud` or device id) |
+| GET | `/devices/{id}/messages` | Delivered inbox (oldest-first); `cloud` is a synthetic recipient |
+| GET | `/messages/{mid}` | Message lifecycle status |
 | GET | `/sandbox/status` | Current shaping values (Dev Sandbox) |
-| GET | `/events` | SSE stream of real-time coverage + link-state events |
+| GET | `/events` | SSE: coverage, link-state, message, … |
 | GET | `/ui/` | Web GUI (satellite pass visualization) |
 
 ## Development

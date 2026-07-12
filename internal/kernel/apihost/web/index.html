@@ -132,6 +132,38 @@
                 <div class="profile-row"><span class="profile-key">mode:</span> <span id="profileMode">—</span></div>
                 <div class="profile-row"><span class="profile-key">schedule:</span> <span id="profileSchedule">—</span></div>
             </div>
+
+            <!-- Messages (store-and-forward) -->
+            <div class="messages-container">
+                <div class="messages-header">
+                    <span class="messages-label">MESSAGES</span>
+                    <span class="messages-hint" id="messagesHint">sandbox-0 → …</span>
+                </div>
+                <p class="messages-explain" id="messagesExplain">
+                    Network (<code>cloud</code>) = SOS backend, delivers immediately.
+                    UE (<code>sandbox-1</code>) = peer phone, waits for that UE’s coverage window.
+                </p>
+                <form class="messages-compose" id="messageForm">
+                    <select id="messageTo" class="messages-input messages-to" aria-label="Destination">
+                        <option value="cloud">Network (cloud)</option>
+                        <option value="sandbox-1" id="messageToUe" disabled>UE (sandbox-1)</option>
+                    </select>
+                    <input type="text" id="messageBody" class="messages-input messages-body" placeholder="SOS / message body" maxlength="1024" aria-label="Body" required>
+                    <button type="submit" class="messages-send" id="messageSend">Send</button>
+                </form>
+                <div class="messages-ue-hint" id="messagesUeHint" hidden>
+                    UE target needs <code>serve --devices 2</code> (demo: <code>--gui</code> or <code>--to ue</code>).
+                </div>
+                <div class="peer-strip" id="peerStrip" hidden>
+                    <span class="peer-strip-label">UE sandbox-1</span>
+                    <span class="peer-strip-status" id="peerStatus">—</span>
+                    <span class="peer-strip-countdown" id="peerCountdown"></span>
+                </div>
+                <div class="messages-log-label">Activity</div>
+                <pre class="messages-log" id="messagesLog" aria-live="polite"></pre>
+                <div class="messages-empty" id="messagesEmpty">Send above — watch Activity + terminal logs.</div>
+                <div class="messages-list" id="messagesList"></div>
+            </div>
         </div>
     </div>
 
@@ -141,7 +173,7 @@
     <!-- Idle overlay (no events received) -->
     <div class="idle-overlay" id="idleOverlay">
         <div class="idle-text">waiting for session...</div>
-        <div class="idle-hint">start <code>ntnbox run --addr :8080 --profile ... -- cmd</code></div>
+        <div class="idle-hint">start <code>ntnbox serve --profile …</code> or <code>ntnbox run --addr :8080 …</code></div>
     </div>
 
     <script type="module" src="app.js"></script>

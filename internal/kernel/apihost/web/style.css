@@ -475,6 +475,255 @@ body {
     color: #64748b;
 }
 
+/* Messages */
+
+.messages-container {
+    background: #0f172a;
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 200px;
+    max-height: 360px;
+}
+
+.messages-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.messages-label {
+    color: #64748b;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.messages-hint {
+    color: #475569;
+    font-size: 10px;
+}
+
+.messages-explain {
+    margin: 0;
+    color: #94a3b8;
+    font-size: 10px;
+    line-height: 1.45;
+}
+
+.messages-explain code {
+    color: #86efac;
+    font-size: 10px;
+}
+
+.messages-compose {
+    display: flex;
+    gap: 6px;
+}
+
+.messages-input {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    color: #e2e8f0;
+    font-size: 12px;
+    padding: 6px 8px;
+    outline: none;
+}
+
+.messages-input:focus {
+    border-color: #4ade80;
+}
+
+.messages-to {
+    width: 148px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.messages-to option:disabled {
+    color: #64748b;
+}
+
+.messages-ue-hint {
+    color: #fbbf24;
+    font-size: 10px;
+    line-height: 1.4;
+}
+
+.messages-ue-hint code {
+    color: #fde68a;
+    font-size: 9px;
+}
+
+.peer-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 12px;
+    background: #020617;
+    border: 1px solid #1e293b;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 11px;
+}
+
+.peer-strip-label {
+    color: #64748b;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.peer-strip-status {
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 0.03em;
+    color: #4ade80;
+}
+
+.peer-strip-status.out {
+    color: #f87171;
+}
+
+.peer-strip-countdown {
+    color: #94a3b8;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10px;
+    margin-left: auto;
+}
+
+.messages-log-label {
+    color: #64748b;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.messages-log {
+    margin: 0;
+    background: #020617;
+    border: 1px solid #1e293b;
+    border-radius: 6px;
+    color: #86efac;
+    font-size: 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    line-height: 1.45;
+    padding: 8px 10px;
+    max-height: 88px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    min-height: 2.5em;
+}
+
+.messages-log:empty::before {
+    content: "(waiting for message events…)";
+    color: #475569;
+}
+
+.messages-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.messages-send {
+    background: #166534;
+    color: #bbf7d0;
+    border: none;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 6px 12px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.messages-send:hover {
+    background: #15803d;
+}
+
+.messages-send:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.messages-empty {
+    color: #64748b;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.messages-empty code {
+    color: #94a3b8;
+    font-size: 10px;
+}
+
+.messages-list {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-height: 0;
+}
+
+.message-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 8px;
+    align-items: start;
+    background: #1e293b;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 11px;
+}
+
+.message-route {
+    color: #94a3b8;
+    white-space: nowrap;
+}
+
+.message-body {
+    color: #e2e8f0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.message-status {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.message-status.queued,
+.message-status.accepted {
+    background: #334155;
+    color: #94a3b8;
+}
+
+.message-status.in_flight {
+    background: #1e3a5f;
+    color: #93c5fd;
+}
+
+.message-status.delivered {
+    background: #14532d;
+    color: #86efac;
+}
+
+.message-status.failed {
+    background: #7f1d1d;
+    color: #fca5a5;
+}
+
 /* Connection badge */
 
 .connection-badge {

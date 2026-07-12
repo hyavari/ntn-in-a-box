@@ -297,6 +297,11 @@ Open `http://localhost:8080/ui` for the live visualization. Confirm the API:
 ```bash
 curl -s http://localhost:8080/devices/sandbox-0/condition
 curl -s http://localhost:8080/devices/sandbox-0/lookahead
+
+# Store-and-forward (UE→cloud) — see COOKBOOK.md §6
+curl -s -X POST http://localhost:8080/devices/sandbox-0/messages \
+  -H 'Content-Type: application/json' \
+  -d '{"to":"cloud","body":"SOS"}'
 ```
 
 ### 2) Build and install the sample

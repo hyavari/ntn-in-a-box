@@ -8,17 +8,15 @@ import (
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/condition"
 )
 
+type linkThrottleState struct {
+	lastAt  time.Time
+	lastVal condition.LinkState
+	has     bool
+}
+
 // Bus is the kernel's in-process pub/sub: coverage transitions,
 // throttled link-state updates, and a generic observability emit path.
 // Safe for concurrent use.
-//
-// Scope: a Bus holds throttle state (last published LinkState/time)
-// for a single link-state stream. It is not safe to share one Bus
-// across multiple devices' link-state updates — their deltas would be
-// compared against each other, which is meaningless. Callers with
-// multiple devices (see the device registry, Task 7) should create one
-// Bus per device/stream rather than multiplexing device IDs through a
-// single Bus.
 type Bus struct {
 	mu sync.Mutex
 
@@ -26,16 +24,19 @@ type Bus struct {
 	linkStateSubs     []*LinkStateHandler
 	observabilitySubs []*ObservabilityHandler
 	positionSubs      []*SatellitePositionHandler
+	messageSubs       []*MessageHandler
 
-	throttle     LinkStateThrottle
-	lastLinkAt   time.Time
-	lastLinkVal  condition.LinkState
-	hasLinkState bool
+	throttle LinkStateThrottle
+	// Per-device link-state throttle (empty DeviceID uses key "").
+	linkByDevice map[string]*linkThrottleState
 }
 
 // New returns a Bus that throttles LinkState publication per throttle.
 func New(throttle LinkStateThrottle) *Bus {
-	return &Bus{throttle: throttle}
+	return &Bus{
+		throttle:     throttle,
+		linkByDevice: make(map[string]*linkThrottleState),
+	}
 }
 
 // SubscribeCoverage registers h to be called for every CoverageEvent.
@@ -122,26 +123,68 @@ func (b *Bus) PublishCoverageEvent(ev CoverageEvent) {
 // against NaN is false), silently degrading the bus to heartbeat-only
 // publishing from then on.
 func (b *Bus) PublishLinkState(state condition.LinkState, now time.Time) {
-	if hasNaN(state) {
+	b.PublishLinkStateEvent(LinkStateEvent{State: state, At: now})
+}
+
+// PublishLinkStateEvent is like PublishLinkState but includes DeviceID
+// (and any other LinkStateEvent fields) on the published event.
+// Throttle state is tracked per DeviceID so multi-device sessions do not
+// suppress each other's linkstate updates.
+func (b *Bus) PublishLinkStateEvent(ev LinkStateEvent) {
+	if hasNaN(ev.State) {
 		return
 	}
 
 	b.mu.Lock()
-	shouldPublish := !b.hasLinkState ||
-		now.Sub(b.lastLinkAt) >= b.throttle.Interval ||
-		linkStateDelta(b.lastLinkVal, state) > b.throttle.DeltaThreshold
+	st := b.linkByDevice[ev.DeviceID]
+	if st == nil {
+		st = &linkThrottleState{}
+		b.linkByDevice[ev.DeviceID] = st
+	}
+	shouldPublish := !st.has ||
+		ev.At.Sub(st.lastAt) >= b.throttle.Interval ||
+		linkStateDelta(st.lastVal, ev.State) > b.throttle.DeltaThreshold
 	if !shouldPublish {
 		b.mu.Unlock()
 		return
 	}
-	b.lastLinkVal = state
-	b.lastLinkAt = now
-	b.hasLinkState = true
+	st.lastVal = ev.State
+	st.lastAt = ev.At
+	st.has = true
 	subs := make([]*LinkStateHandler, len(b.linkStateSubs))
 	copy(subs, b.linkStateSubs)
 	b.mu.Unlock()
 
-	ev := LinkStateEvent{State: state, At: now}
+	for _, p := range subs {
+		(*p)(ev)
+	}
+}
+
+// SubscribeMessage registers h for MessageEvent publications.
+func (b *Bus) SubscribeMessage(h MessageHandler) func() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	ptr := &h
+	b.messageSubs = append(b.messageSubs, ptr)
+	return func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		for i, p := range b.messageSubs {
+			if p == ptr {
+				b.messageSubs = append(b.messageSubs[:i], b.messageSubs[i+1:]...)
+				return
+			}
+		}
+	}
+}
+
+// PublishMessage notifies all message subscribers. Never throttled.
+func (b *Bus) PublishMessage(ev MessageEvent) {
+	b.mu.Lock()
+	subs := make([]*MessageHandler, len(b.messageSubs))
+	copy(subs, b.messageSubs)
+	b.mu.Unlock()
+
 	for _, p := range subs {
 		(*p)(ev)
 	}

@@ -18,6 +18,7 @@ type sseCoverageEvent struct {
 	ElapsedSec            float64  `json:"elapsed_sec"`
 	UntilNextTransition   float64  `json:"until_next_transition"`
 	At                    string   `json:"at"`
+	DeviceID              string   `json:"device_id,omitempty"`
 	LookaheadSec          *float64 `json:"lookahead_sec,omitempty"`
 	NextOpenAt            *string  `json:"next_open_at,omitempty"`
 	NextCloseAt           *string  `json:"next_close_at,omitempty"`
@@ -31,6 +32,7 @@ type sseLinkStateEvent struct {
 	LossPct       float64 `json:"loss_pct"`
 	BandwidthKbps float64 `json:"bandwidth_kbps"`
 	At            string  `json:"at"`
+	DeviceID      string  `json:"device_id,omitempty"`
 }
 
 // handleSSE streams bus events to the client as Server-Sent Events.
@@ -63,11 +65,13 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			ElapsedSec:          ev.ElapsedSec,
 			UntilNextTransition: ev.UntilNextTransition,
 			At:                  ev.At.Format(time.RFC3339),
+			DeviceID:            ev.DeviceID,
 		}
 
+		eval := s.evaluatorFor(ev.DeviceID)
 		// Enrich with evaluator data if available (overrides replay values).
-		if s.eval != nil {
-			_, cov := s.eval.Evaluate(ev.At)
+		if eval != nil {
+			_, cov := eval.Evaluate(ev.At)
 			payload.InCoverage = cov.InCoverage
 			payload.ElapsedSec = cov.ElapsedSec
 			payload.UntilNextTransition = cov.UntilNextTransitionSec
@@ -79,7 +83,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		payload.UntilNextTransition = finiteSec(payload.UntilNextTransition)
 
 		if ev.Kind == eventbus.KindWindowOpening || ev.Kind == eventbus.KindWindowClosing {
-			enrichLookaheadCoverage(&payload, s.eval, ev.At)
+			enrichLookaheadCoverage(&payload, eval, ev.At)
 		}
 
 		data, err := json.Marshal(payload)
@@ -101,6 +105,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			LossPct:       ev.State.LossPct,
 			BandwidthKbps: ev.State.BandwidthKbps,
 			At:            ev.At.Format(time.RFC3339),
+			DeviceID:      ev.DeviceID,
 		}
 		data, err := json.Marshal(payload)
 		if err != nil {
@@ -119,6 +124,25 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		msg := fmt.Sprintf("event: lifecycle\ndata: %s\n\n", `{"kind":"replay_done"}`)
+		select {
+		case ch <- []byte(msg):
+		default:
+		}
+	})
+
+	unsubMessage := s.bus.SubscribeMessage(func(ev eventbus.MessageEvent) {
+		payload := map[string]any{
+			"id":     ev.ID,
+			"from":   ev.From,
+			"to":     ev.To,
+			"status": ev.Status,
+			"at":     ev.At.Format(time.RFC3339),
+		}
+		data, err := json.Marshal(payload)
+		if err != nil {
+			return
+		}
+		msg := fmt.Sprintf("event: message\ndata: %s\n\n", data)
 		select {
 		case ch <- []byte(msg):
 		default:
@@ -190,6 +214,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			unsubCoverage()
 			unsubLinkState()
 			unsubObs()
+			unsubMessage()
 			unsubPosition()
 			return
 		case msg := <-ch:

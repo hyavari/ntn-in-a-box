@@ -5,8 +5,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
@@ -169,6 +171,64 @@ class NtnBoxClient(
         awaitClose { removeListener(listener) }
     }
 
+    /** Flow of SSE message status updates. Does not call [start]. */
+    fun messageFlow(): Flow<NtnMessage> = callbackFlow {
+        val listener = object : NtnBoxListener {
+            override fun onCoverageChanged(inCoverage: Boolean, kind: CoverageKind) = Unit
+
+            override fun onCondition(condition: NtnCondition) = Unit
+
+            override fun onMessage(message: NtnMessage) {
+                trySend(message)
+            }
+
+            override fun onConnectionChanged(connected: Boolean) = Unit
+        }
+        addListener(Executor { it.run() }, listener)
+        awaitClose { removeListener(listener) }
+    }
+
+    /**
+     * POST /devices/{deviceId}/messages. Blocking on the calling thread —
+     * call from a background executor.
+     */
+    fun sendMessage(to: String, body: String): NtnMessage {
+        val payload = org.json.JSONObject()
+            .put("to", to)
+            .put("body", body)
+            .toString()
+        val request = Request.Builder()
+            .url("$root/devices/$deviceId/messages")
+            .post(payload.toRequestBody(JSON_MEDIA))
+            .build()
+        pollClient.newCall(request).execute().use { resp ->
+            val text = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) {
+                throw IOException("sendMessage HTTP ${resp.code}: $text")
+            }
+            return NtnJson.parseMessage(text)
+        }
+    }
+
+    /**
+     * GET /devices/{id}/messages inbox. Blocking — use a background thread.
+     * Pass [recipientId] or null for this client's [deviceId].
+     */
+    fun fetchInbox(recipientId: String? = null): List<NtnMessage> {
+        val id = recipientId ?: deviceId
+        val request = Request.Builder()
+            .url("$root/devices/$id/messages")
+            .get()
+            .build()
+        pollClient.newCall(request).execute().use { resp ->
+            val text = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) {
+                throw IOException("fetchInbox HTTP ${resp.code}: $text")
+            }
+            return NtnJson.parseMessageList(text)
+        }
+    }
+
     /** Flow of SSE connection up/down. Does not call [start]. */
     fun connectionFlow(): Flow<Boolean> = callbackFlow {
         val listener = object : NtnBoxListener {
@@ -209,6 +269,7 @@ class NtnBoxClient(
                     null, "coverage" -> {
                         try {
                             val payload = NtnJson.parseCoverageEvent(data)
+                            if (!isForThisDevice(payload.deviceId)) return
                             dispatchCoverage(payload.inCoverage, payload.kind)
                         } catch (_: Exception) {
                             // ignore malformed event
@@ -216,7 +277,18 @@ class NtnBoxClient(
                     }
                     "linkstate" -> {
                         try {
-                            dispatchLinkState(NtnJson.parseLinkState(data))
+                            val ls = NtnJson.parseLinkState(data)
+                            if (!isForThisDevice(ls.deviceId)) return
+                            dispatchLinkState(ls)
+                        } catch (_: Exception) {
+                            // ignore malformed event
+                        }
+                    }
+                    "message" -> {
+                        try {
+                            val msg = NtnJson.parseMessage(data)
+                            if (!isMessageForThisDevice(msg)) return
+                            dispatchMessage(msg)
                         } catch (_: Exception) {
                             // ignore malformed event
                         }
@@ -367,6 +439,17 @@ class NtnBoxClient(
         }
     }
 
+    private fun dispatchMessage(message: NtnMessage) {
+        if (!started.get()) return
+        for (reg in listeners) {
+            reg.executor.execute {
+                if (started.get()) {
+                    reg.listener.onMessage(message)
+                }
+            }
+        }
+    }
+
     private fun dispatchConnection(connected: Boolean) {
         for (reg in listeners) {
             reg.executor.execute {
@@ -375,9 +458,20 @@ class NtnBoxClient(
         }
     }
 
+    /** Empty/missing device_id (replay) applies to this client; otherwise must match. */
+    private fun isForThisDevice(eventDeviceId: String?): Boolean {
+        return eventDeviceId.isNullOrEmpty() || eventDeviceId == deviceId
+    }
+
+    private fun isMessageForThisDevice(msg: NtnMessage): Boolean {
+        return msg.from == deviceId || msg.to == deviceId
+    }
+
     companion object {
         const val DEFAULT_BASE_URL = "http://127.0.0.1:8080"
         const val DEFAULT_DEVICE_ID = "sandbox-0"
         const val DEFAULT_POLL_MS = 1000L
+
+        private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
     }
 }

@@ -35,6 +35,20 @@ data class NtnLinkState(
     val lossPct: Double,
     val bandwidthKbps: Double,
     val at: String? = null,
+    val deviceId: String? = null,
+)
+
+/**
+ * Store-and-forward message (send status or inbox item).
+ */
+data class NtnMessage(
+    val id: String,
+    val from: String? = null,
+    val to: String? = null,
+    val body: String? = null,
+    val status: String,
+    val acceptedAt: String? = null,
+    val deliveredAt: String? = null,
 )
 
 /**

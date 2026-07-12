@@ -1,10 +1,11 @@
 # ntnbox Android companion
 
-Client library for NTN-in-a-Box coverage, condition, lookahead, and link-state signals.
+Client library for NTN-in-a-Box coverage, condition, lookahead, link-state, and messaging signals.
 
-- SSE: `GET /events` — coverage kinds + optional `linkstate`
+- SSE: `GET /events` — coverage, `linkstate`, `message`
 - Poll: `GET /devices/{id}/condition` (countdown + link metrics)
 - Poll: `GET /devices/{id}/lookahead` (absolute open/close, duration, elev)
+- Messaging: `sendMessage` / `fetchInbox` (store-and-forward)
 - Callbacks + optional Kotlin Flow wrappers
 - `minSdk 26`
 
@@ -48,9 +49,13 @@ client.addListener(mainExecutor, object : NtnBoxListener {
     override fun onCondition(condition: NtnCondition) { /* countdown */ }
     override fun onLookahead(lookahead: NtnLookahead) { /* open/close / duration */ }
     override fun onLinkState(linkState: NtnLinkState) { /* throttled metrics */ }
+    override fun onMessage(message: NtnMessage) { /* delivered / status */ }
     override fun onConnectionChanged(connected: Boolean) { /* SSE up/down */ }
 })
 client.start()
+// …
+client.sendMessage("cloud", "SOS") // call off the main thread
+client.fetchInbox("cloud")
 // …
 client.stop()
 ```

@@ -3,6 +3,7 @@ package com.ntnbox.android
 /**
  * Pure JSON mappers for ntnbox wire formats (no Android org.json).
  * Intentionally minimal — payloads are small and controlled by ntnbox.
+ * String fields and arrays respect JSON quoting/escapes.
  */
 object NtnJson {
     fun parseCondition(json: String): NtnCondition {
@@ -33,6 +34,7 @@ object NtnJson {
         val kind: CoverageKind,
         val inCoverage: Boolean,
         val untilNextTransition: Double? = null,
+        val deviceId: String? = null,
     )
 
     fun parseCoverageEvent(json: String): CoveragePayload {
@@ -40,6 +42,7 @@ object NtnJson {
             kind = CoverageKind.fromWire(optionalString(json, "kind")),
             inCoverage = optionalBoolean(json, "in_coverage") ?: false,
             untilNextTransition = optionalDouble(json, "until_next_transition"),
+            deviceId = optionalString(json, "device_id"),
         )
     }
 
@@ -50,7 +53,61 @@ object NtnJson {
             lossPct = requireDouble(json, "loss_pct"),
             bandwidthKbps = requireDouble(json, "bandwidth_kbps"),
             at = optionalString(json, "at"),
+            deviceId = optionalString(json, "device_id"),
         )
+    }
+
+    fun parseMessage(json: String): NtnMessage {
+        return NtnMessage(
+            id = optionalString(json, "id") ?: throw IllegalArgumentException("missing id"),
+            from = optionalString(json, "from"),
+            to = optionalString(json, "to"),
+            body = optionalString(json, "body"),
+            status = optionalString(json, "status")
+                ?: throw IllegalArgumentException("missing status"),
+            acceptedAt = optionalString(json, "accepted_at"),
+            deliveredAt = optionalString(json, "delivered_at"),
+        )
+    }
+
+    fun parseMessageList(json: String): List<NtnMessage> {
+        val trimmed = json.trim()
+        if (trimmed == "[]" || trimmed.isEmpty()) return emptyList()
+        if (!trimmed.startsWith("[")) {
+            throw IllegalArgumentException("expected JSON array")
+        }
+        val objs = mutableListOf<String>()
+        var depth = 0
+        var start = -1
+        var inString = false
+        var escape = false
+        for (i in trimmed.indices) {
+            val c = trimmed[i]
+            if (inString) {
+                if (escape) {
+                    escape = false
+                } else when (c) {
+                    '\\' -> escape = true
+                    '"' -> inString = false
+                }
+                continue
+            }
+            when (c) {
+                '"' -> inString = true
+                '{' -> {
+                    if (depth == 0) start = i
+                    depth++
+                }
+                '}' -> {
+                    depth--
+                    if (depth == 0 && start >= 0) {
+                        objs.add(trimmed.substring(start, i + 1))
+                        start = -1
+                    }
+                }
+            }
+        }
+        return objs.map { parseMessage(it) }
     }
 
     private fun requireBoolean(json: String, key: String): Boolean {
@@ -76,8 +133,55 @@ object NtnJson {
     }
 
     private fun optionalString(json: String, key: String): String? {
-        val re = Regex("\"${Regex.escape(key)}\"\\s*:\\s*\"([^\"]*)\"")
-        val m = re.find(json) ?: return null
-        return m.groupValues[1]
+        val keyRe = Regex("\"${Regex.escape(key)}\"\\s*:\\s*\"")
+        val m = keyRe.find(json) ?: return null
+        return decodeJsonString(json, m.range.last + 1)
+    }
+
+    /** Decode a JSON string starting at [start] (first char after opening quote). */
+    private fun decodeJsonString(json: String, start: Int): String? {
+        val sb = StringBuilder()
+        var i = start
+        while (i < json.length) {
+            val c = json[i]
+            when {
+                c == '"' -> return sb.toString()
+                c == '\\' && i + 1 < json.length -> {
+                    when (val esc = json[i + 1]) {
+                        '"', '\\', '/' -> {
+                            sb.append(esc)
+                            i += 2
+                        }
+                        'n' -> {
+                            sb.append('\n')
+                            i += 2
+                        }
+                        'r' -> {
+                            sb.append('\r')
+                            i += 2
+                        }
+                        't' -> {
+                            sb.append('\t')
+                            i += 2
+                        }
+                        'u' -> {
+                            if (i + 5 >= json.length) return null
+                            val code = json.substring(i + 2, i + 6).toIntOrNull(16) ?: return null
+                            sb.append(code.toChar())
+                            i += 6
+                        }
+                        else -> {
+                            sb.append(esc)
+                            i += 2
+                        }
+                    }
+                }
+                else -> {
+                    sb.append(c)
+                    i++
+                }
+            }
+        }
+        return null
     }
 }

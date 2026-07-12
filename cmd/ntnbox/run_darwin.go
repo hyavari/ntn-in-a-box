@@ -84,17 +84,7 @@ func runViaDarwinDocker(args []string) error {
 
 	// Publish the API port if --addr is set.
 	if parsed.addr != "" {
-		// Extract port from addr (":8080" or "host:port").
-		port := parsed.addr
-		if idx := len(port) - 1; idx >= 0 {
-			for i := len(port) - 1; i >= 0; i-- {
-				if port[i] == ':' {
-					port = port[i+1:]
-					break
-				}
-			}
-		}
-		dockerArgs = append(dockerArgs, "-p", port+":"+port)
+		dockerArgs = append(dockerArgs, "-p", dockerHostPublishSpec(parsed.addr))
 	}
 
 	// Only attach TTY if stdin is a terminal (required for --tui).

@@ -31,6 +31,10 @@ type CoverageEvent struct {
 	Kind CoverageEventKind
 	At   time.Time
 
+	// DeviceID identifies which device this event belongs to.
+	// Set by the driver when multi-device (and single-device) sessions run.
+	DeviceID string
+
 	// Optional pre-computed state (used by replay mode when no
 	// evaluator is available). Zero values mean "not provided."
 	InCoverage          bool
@@ -46,9 +50,23 @@ type CoverageEvent struct {
 // Callers should only publish a LinkStateEvent while in coverage; use
 // CoverageEvent for transitions, not a LinkState with NaN fields.
 type LinkStateEvent struct {
-	State condition.LinkState
-	At    time.Time
+	State    condition.LinkState
+	At       time.Time
+	DeviceID string
 }
+
+// MessageEvent is published when a store-and-forward message changes status.
+type MessageEvent struct {
+	ID     string
+	From   string
+	To     string
+	Status string
+	Body   string
+	At     time.Time
+}
+
+// MessageHandler is called for every published MessageEvent.
+type MessageHandler func(MessageEvent)
 
 // ObservabilityEvent is a generic, unthrottled event for metrics/
 // tracing — the "emit" hook in the module contract.

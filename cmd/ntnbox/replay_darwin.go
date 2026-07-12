@@ -69,14 +69,7 @@ func replayViaDarwinDocker(args []string) error {
 	}
 
 	if addr != "" {
-		port := addr
-		for i := len(port) - 1; i >= 0; i-- {
-			if port[i] == ':' {
-				port = port[i+1:]
-				break
-			}
-		}
-		dockerArgs = append(dockerArgs, "-p", port+":"+port)
+		dockerArgs = append(dockerArgs, "-p", dockerHostPublishSpec(addr))
 	}
 
 	if fileInfo, _ := os.Stdin.Stat(); fileInfo.Mode()&os.ModeCharDevice != 0 {

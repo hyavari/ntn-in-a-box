@@ -37,8 +37,10 @@ type Server struct {
 	sessionInfo *SessionInfo
 
 	// Per-device evaluators, created at device registration time.
-	mu         sync.RWMutex
-	evaluators map[string]condition.Eval
+	mu              sync.RWMutex
+	evaluators      map[string]condition.Eval
+	storeAndForward bool
+	onDeviceReg     func(deviceID string, eval condition.Eval)
 }
 
 // Config holds what the server needs to start.
@@ -90,6 +92,42 @@ func (s *Server) RegisterEvaluator(deviceID string, eval condition.Eval) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.evaluators[deviceID] = eval
+}
+
+// DeviceEvaluator returns the per-device evaluator, or nil if unknown.
+// Unlike SSE enrichment, this does not fall back to the session evaluator.
+func (s *Server) DeviceEvaluator(deviceID string) condition.Eval {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.evaluators[deviceID]
+}
+
+// OnDeviceRegistered sets a hook invoked after POST /devices creates an
+// evaluator. Used by serve to start a driver loop for late-registered UEs.
+func (s *Server) OnDeviceRegistered(fn func(deviceID string, eval condition.Eval)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onDeviceReg = fn
+}
+
+// SetStoreAndForward marks whether the messaging module is loaded.
+func (s *Server) SetStoreAndForward(enabled bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.storeAndForward = enabled
+}
+
+// evaluatorFor returns the per-device evaluator, falling back to the
+// session evaluator when deviceID is empty or unknown.
+func (s *Server) evaluatorFor(deviceID string) condition.Eval {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if deviceID != "" {
+		if e, ok := s.evaluators[deviceID]; ok {
+			return e
+		}
+	}
+	return s.eval
 }
 
 // ListenAndServe starts the HTTP server on addr.
@@ -198,7 +236,12 @@ func (s *Server) handleRegisterDevice(w http.ResponseWriter, r *http.Request) {
 
 	s.mu.Lock()
 	s.evaluators[d.ID] = eval
+	onReg := s.onDeviceReg
 	s.mu.Unlock()
+
+	if onReg != nil {
+		onReg(d.ID, eval)
+	}
 
 	writeJSON(w, http.StatusCreated, toDeviceResponse(d))
 }
@@ -384,9 +427,13 @@ func (s *Server) handleGetCapabilities(w http.ResponseWriter, r *http.Request) {
 	sos := strings.HasPrefix(name, "sos_")
 	messaging := sos || strings.HasPrefix(name, "d2c_")
 
+	s.mu.RLock()
+	saf := s.storeAndForward
+	s.mu.RUnlock()
+
 	resp := capabilitiesResponse{
 		Messaging:          messaging, // profile is messaging-oriented (D2C/SOS)
-		StoreAndForward:    false,     // server module not shipped yet
+		StoreAndForward:    saf,
 		SOS:                sos,
 		Voice:              false,
 		Data:               true,

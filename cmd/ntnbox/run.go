@@ -44,7 +44,7 @@ func runRun(args []string) error {
 	// Parse flags up to "--" separator.
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	profilePath := fs.String("profile", "", "Path to a YAML profile file")
-	addr := fs.String("addr", "", "Optionally expose the API host (host:port)")
+	addr := fs.String("addr", "", "Optionally expose the API host (host:port); bare :port binds 127.0.0.1")
 	tuiFlag := fs.Bool("tui", false, "Show a live TUI dashboard instead of scrolling output")
 	recordPath := fs.String("record", "", "Record bus events to a JSONL file")
 
@@ -286,6 +286,9 @@ func runRun(args []string) error {
 	}
 
 	// Optionally start the API host.
+	loopCtx, loopCancel := context.WithCancel(ctx)
+	defer loopCancel()
+
 	if *addr != "" {
 		var profiles []*profile.Profile
 		if p != nil {
@@ -309,19 +312,31 @@ func runRun(args []string) error {
 				ProfileName: p.Name,
 			}
 		}
-		srv := startAPIHost(*addr, bus, registry, eval, sessInfo, profiles...)
+		srv := newAPIHost(bus, registry, eval, sessInfo, profiles...)
 		sandbox.RegisterRoutes(srv)
+		// Late POST /devices need their own driver so messaging can flush on window_opened.
+		// Must be set before listenAPIHost to avoid a registration race.
+		srv.OnDeviceRegistered(func(id string, deviceEval condition.Eval) {
+			if id == "sandbox-0" {
+				return
+			}
+			go driver.New(driver.Config{
+				Evaluator:    deviceEval,
+				Bus:          bus,
+				DeviceID:     id,
+				LookaheadSec: lookaheadSec,
+			}).Run(loopCtx)
+		})
+		listenAPIHost(srv, *addr, eval)
 	}
 
-	// Start driver loop.
+	// Start driver loop for sandbox-0.
 	loop := driver.New(driver.Config{
 		Evaluator:    eval,
 		Bus:          bus,
+		DeviceID:     "sandbox-0",
 		LookaheadSec: lookaheadSec,
 	})
-
-	loopCtx, loopCancel := context.WithCancel(ctx)
-	defer loopCancel()
 	go loop.Run(loopCtx)
 
 	// TUI mode: the TUI owns the terminal and manages the child process.

@@ -92,7 +92,13 @@ func (m *Module) RegisterRoutes(host module.RouteRegistrar) {
 // OnCoverageEvent reacts to coverage transitions.
 //   - window_closed: set 100% loss (simulate link disappearing)
 //   - window_opened: resume curve-driven shaping with last known state
+//
+// Only the primary sandbox namespace is shaped; peer DeviceIDs are ignored
+// so multi-device messaging drivers cannot flap netem for sandbox-0.
 func (m *Module) OnCoverageEvent(ev eventbus.CoverageEvent) {
+	if ev.DeviceID != "" && ev.DeviceID != "sandbox-0" {
+		return
+	}
 	m.mu.Lock()
 
 	switch ev.Kind {
@@ -132,6 +138,8 @@ func (m *Module) OnCoverageEvent(ev eventbus.CoverageEvent) {
 			})
 		}
 
+	case eventbus.KindWindowOpening, eventbus.KindWindowClosing:
+		m.mu.Unlock()
 	default:
 		m.mu.Unlock()
 	}
@@ -139,6 +147,9 @@ func (m *Module) OnCoverageEvent(ev eventbus.CoverageEvent) {
 
 // OnLinkState applies updated impairment values to the shaper.
 func (m *Module) OnLinkState(ev eventbus.LinkStateEvent) {
+	if ev.DeviceID != "" && ev.DeviceID != "sandbox-0" {
+		return
+	}
 	m.mu.Lock()
 	m.lastState = ev.State
 	m.hasState = true

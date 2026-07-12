@@ -27,8 +27,13 @@
 #   PRUNE=1 ./scripts/demo.sh                  # also remove docker image on exit
 #
 # Ctrl+C to stop. Binaries are cleaned up on exit.
+# For messaging-only (no Docker): ./scripts/demo-messaging.sh
 
 set -euo pipefail
+
+usage() {
+  sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+}
 
 # Parse flags.
 TUI_FLAG=""
@@ -38,6 +43,10 @@ REPLAY_FILE=""
 
 while [[ "${1:-}" == --* ]]; do
   case "$1" in
+    --help|-h)
+      usage
+      exit 0
+      ;;
     --tui)
       TUI_FLAG="--tui"
       shift
@@ -68,7 +77,9 @@ while [[ "${1:-}" == --* ]]; do
       shift 2
       ;;
     *)
-      break
+      echo "error: unknown flag: $1" >&2
+      usage >&2
+      exit 1
       ;;
   esac
 done
@@ -82,15 +93,39 @@ if [[ -n "$RECORD_FILE" && -n "$REPLAY_FILE" ]]; then
   exit 1
 fi
 
+# macOS bash 3.2 + set -u rejects "${empty_array[@]}" — build argv explicitly.
+build_run_argv() {
+  # Sets global RUN_ARGV as a bash array for: ntnbox <mode> ... -- <cmd>
+  local mode="$1"
+  shift
+  RUN_ARGV=("$mode")
+  if [[ -n "$TUI_FLAG" ]]; then
+    RUN_ARGV+=(--tui)
+  fi
+  if [[ -n "$RECORD_FILE" ]]; then
+    RUN_ARGV+=(--record "$RECORD_FILE")
+  fi
+  if [[ -n "$REPLAY_FILE" ]]; then
+    RUN_ARGV+=(--file "$REPLAY_FILE")
+  fi
+  RUN_ARGV+=(--addr "127.0.0.1:8080")
+  if [[ "$mode" == "run" ]]; then
+    RUN_ARGV+=(--profile "$PROFILE_PATH")
+  fi
+  RUN_ARGV+=(--)
+  RUN_ARGV+=("$@")
+}
+
 # Replay mode short-circuits before profile check.
 if [[ -n "$REPLAY_FILE" ]]; then
   if [[ ! -f "$REPLAY_FILE" ]]; then
     echo "error: recording file not found: $REPLAY_FILE" >&2
     exit 1
   fi
-  CMD=("${@:-poller --url https://example.com --interval 2s}")
   if [[ $# -eq 0 ]]; then
     CMD=(poller --url https://example.com --interval 2s)
+  else
+    CMD=("$@")
   fi
 
   cleanup() {
@@ -110,10 +145,11 @@ if [[ -n "$REPLAY_FILE" ]]; then
   echo "==> building docker image..."
   docker build -t ntnbox:latest . -q
 
-  echo "==> replaying: ntnbox replay ${TUI_FLAG} --file $REPLAY_FILE -- ${CMD[*]}"
+  build_run_argv replay "${CMD[@]}"
+  echo "==> replaying: ntnbox ${RUN_ARGV[*]}"
   echo "    GUI available at: http://localhost:8080/ui"
   echo ""
-  ./ntnbox replay ${TUI_FLAG} --file "$REPLAY_FILE" --addr :8080 -- "${CMD[@]}"
+  ./ntnbox "${RUN_ARGV[@]}"
   exit $?
 fi
 
@@ -184,16 +220,12 @@ fi
 echo "==> building docker image..."
 docker build -t ntnbox:latest . -q
 
-RECORD_ARGS=()
-if [[ -n "$RECORD_FILE" ]]; then
-  RECORD_ARGS=(--record "$RECORD_FILE")
-fi
-
-echo "==> running: ntnbox run ${TUI_FLAG} ${RECORD_ARGS[*]} --addr :8080 --profile $PROFILE_PATH -- ${CMD[*]}"
+build_run_argv run "${CMD[@]}"
+echo "==> running: ntnbox ${RUN_ARGV[*]}"
 echo "    GUI available at: http://localhost:8080/ui"
 if [[ -n "$RECORD_FILE" ]]; then
   echo "    Recording to: $RECORD_FILE"
 fi
 echo ""
 
-./ntnbox run ${TUI_FLAG} "${RECORD_ARGS[@]}" --addr :8080 --profile "$PROFILE_PATH" -- "${CMD[@]}"
+./ntnbox "${RUN_ARGV[@]}"

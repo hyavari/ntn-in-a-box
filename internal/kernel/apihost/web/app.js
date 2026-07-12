@@ -19,6 +19,16 @@ const state = {
     connected: false,
     hasData: false,
     replayDone: false,
+    messages: {}, // id -> { id, from, to, status, body, at }
+    messageLog: [], // activity lines (mirrors CLI)
+    // Primary device for metrics panel (multi-device: ignore other device_ids).
+    focusDeviceId: 'sandbox-0',
+    hasPeerUe: false,
+    peer: {
+        inCoverage: false,
+        untilNext: 0,
+        kind: '',
+    },
 };
 
 const MAX_HISTORY = 20;
@@ -57,6 +67,19 @@ const els = {
     profileDetail: $('profileDetail'),
     profileMode: $('profileMode'),
     profileSchedule: $('profileSchedule'),
+    messagesList: $('messagesList'),
+    messagesEmpty: $('messagesEmpty'),
+    messagesHint: $('messagesHint'),
+    messagesLog: $('messagesLog'),
+    messagesUeHint: $('messagesUeHint'),
+    peerStrip: $('peerStrip'),
+    peerStatus: $('peerStatus'),
+    peerCountdown: $('peerCountdown'),
+    messageForm: $('messageForm'),
+    messageTo: $('messageTo'),
+    messageToUe: $('messageToUe'),
+    messageBody: $('messageBody'),
+    messageSend: $('messageSend'),
 };
 
 // --- View Management ---
@@ -141,6 +164,17 @@ function connect() {
     es.addEventListener('coverage', (e) => {
         const data = JSON.parse(e.data);
 
+        // Peer UE window progress (multi-device).
+        if (data.device_id === 'sandbox-1') {
+            applyPeerCoverage(data);
+            return;
+        }
+
+        // Ignore other devices when device_id is present (multi-device serve).
+        if (data.device_id && data.device_id !== state.focusDeviceId && data.kind !== 'initial') {
+            return;
+        }
+
         if (state.replayDone) {
             state.replayDone = false;
         }
@@ -193,6 +227,9 @@ function connect() {
 
     es.addEventListener('linkstate', (e) => {
         const data = JSON.parse(e.data);
+        if (data.device_id && data.device_id !== state.focusDeviceId) {
+            return;
+        }
         state.metrics.delay = data.delay_ms;
         state.metrics.jitter = data.jitter_ms;
         state.metrics.loss = data.loss_pct;
@@ -216,6 +253,31 @@ function connect() {
         }
     });
 
+    es.addEventListener('message', (e) => {
+        const data = JSON.parse(e.data);
+        upsertMessage(data);
+        appendMessageLog(data);
+        // SSE omits body (CORS); fill from same-origin status GET when missing.
+        const cur = state.messages[data.id];
+        if (data.id && cur && !cur.body) {
+            fetch(`/messages/${encodeURIComponent(data.id)}`)
+                .then((r) => (r.ok ? r.json() : null))
+                .then((full) => {
+                    if (!full) return;
+                    upsertMessage({
+                        id: full.id,
+                        from: full.from,
+                        to: full.to,
+                        status: full.status,
+                        body: full.body,
+                        at: full.delivered_at || full.accepted_at || data.at,
+                    });
+                })
+                .catch(() => {});
+        }
+        hideIdle();
+    });
+
     es.onopen = () => {
         state.connected = true;
         showBadge('connected', 'connected');
@@ -226,6 +288,225 @@ function connect() {
         state.connected = false;
         showBadge('reconnecting...', 'error');
     };
+}
+
+function upsertMessage(data) {
+    if (!data || !data.id) return;
+    const prev = state.messages[data.id] || {};
+    state.messages[data.id] = {
+        id: data.id,
+        from: data.from || prev.from || '?',
+        to: data.to || prev.to || '?',
+        status: data.status || prev.status || 'queued',
+        body: data.body != null && data.body !== '' ? data.body : (prev.body || ''),
+        at: data.at || prev.at || '',
+    };
+    renderMessages();
+}
+
+function appendMessageLog(data) {
+    if (!data || !data.id || !data.status) return;
+    const line = `${data.id}  ${data.from || '?'} → ${data.to || '?'}  ${data.status}`;
+    const prev = state.messageLog[state.messageLog.length - 1];
+    if (prev === line) return;
+    state.messageLog.push(line);
+    if (state.messageLog.length > 40) {
+        state.messageLog = state.messageLog.slice(-40);
+    }
+    renderMessageLog();
+}
+
+function renderMessageLog() {
+    if (!els.messagesLog) return;
+    els.messagesLog.textContent = state.messageLog.join('\n');
+    els.messagesLog.scrollTop = els.messagesLog.scrollHeight;
+}
+
+function renderMessages() {
+    const rows = Object.values(state.messages).sort((a, b) => {
+        if (a.at === b.at) return b.id.localeCompare(a.id);
+        return (b.at || '').localeCompare(a.at || '');
+    });
+    if (!els.messagesList || !els.messagesEmpty) return;
+    if (rows.length === 0) {
+        els.messagesEmpty.style.display = '';
+        els.messagesList.innerHTML = '';
+        return;
+    }
+    els.messagesEmpty.style.display = 'none';
+    els.messagesList.innerHTML = rows.map((m) => {
+        const st = escapeHtml(m.status || 'queued');
+        const route = `${escapeHtml(m.from)} → ${escapeHtml(m.to)}`;
+        const body = escapeHtml(m.body || '(no body)');
+        return `<div class="message-row">
+            <span class="message-route">${route}</span>
+            <span class="message-body" title="${body}">${body}</span>
+            <span class="message-status ${st}">${st.replace('_', ' ')}</span>
+        </div>`;
+    }).join('');
+}
+
+function escapeHtml(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function selectedMessageTo() {
+    const v = (els.messageTo && els.messageTo.value) || 'cloud';
+    return v === 'sandbox-1' ? 'sandbox-1' : 'cloud';
+}
+
+function updateMessageDestinationUI() {
+    if (els.messageToUe) {
+        els.messageToUe.disabled = !state.hasPeerUe;
+    }
+    if (els.messagesUeHint) {
+        els.messagesUeHint.hidden = state.hasPeerUe;
+    }
+    if (els.messageTo && !state.hasPeerUe && els.messageTo.value === 'sandbox-1') {
+        els.messageTo.value = 'cloud';
+    }
+    const to = selectedMessageTo();
+    if (els.messagesHint) {
+        els.messagesHint.textContent = `${state.focusDeviceId} → ${to === 'cloud' ? 'network (cloud)' : 'UE (sandbox-1)'}`;
+    }
+    updatePeerStrip();
+}
+
+function applyPeerCoverage(data) {
+    state.peer.inCoverage = !!data.in_coverage;
+    if (typeof data.until_next_transition === 'number') {
+        state.peer.untilNext = data.until_next_transition;
+    }
+    if (data.kind) {
+        state.peer.kind = data.kind;
+    }
+    updatePeerStrip();
+}
+
+function updatePeerStrip() {
+    if (!els.peerStrip) return;
+    els.peerStrip.hidden = !state.hasPeerUe;
+    if (!state.hasPeerUe) return;
+
+    if (els.peerStatus) {
+        if (state.peer.inCoverage) {
+            els.peerStatus.textContent = '▲ IN COVERAGE';
+            els.peerStatus.classList.remove('out');
+        } else {
+            els.peerStatus.textContent = '▼ OUT OF COVERAGE';
+            els.peerStatus.classList.add('out');
+        }
+    }
+    if (els.peerCountdown) {
+        const sec = Math.max(0, Math.round(state.peer.untilNext));
+        if (state.peer.inCoverage) {
+            els.peerCountdown.textContent = `window closes in ${formatPeerDuration(sec)}`;
+        } else {
+            els.peerCountdown.textContent = `next open in ${formatPeerDuration(sec)}`;
+        }
+    }
+}
+
+function formatPeerDuration(sec) {
+    if (sec >= 3600) {
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        return `${h}h ${m}m`;
+    }
+    if (sec >= 60) {
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        return `${m}m ${s}s`;
+    }
+    return `${sec}s`;
+}
+
+async function pollPeerCondition() {
+    if (!state.hasPeerUe) return;
+    try {
+        const resp = await fetch('/devices/sandbox-1/condition');
+        if (!resp.ok) return;
+        const c = await resp.json();
+        state.peer.inCoverage = !!c.in_coverage;
+        if (typeof c.until_next_transition_sec === 'number') {
+            state.peer.untilNext = c.until_next_transition_sec;
+        }
+        updatePeerStrip();
+    } catch (_) { /* ignore */ }
+}
+
+async function refreshPeerDevices() {
+    try {
+        const resp = await fetch('/devices');
+        if (!resp.ok) return;
+        const list = await resp.json();
+        state.hasPeerUe = Array.isArray(list) && list.some((d) => d && d.id === 'sandbox-1');
+    } catch (_) {
+        state.hasPeerUe = false;
+    }
+    updateMessageDestinationUI();
+    if (state.hasPeerUe) {
+        pollPeerCondition();
+    }
+}
+
+async function sendMessageFromForm(ev) {
+    ev.preventDefault();
+    const to = selectedMessageTo();
+    if (to === 'sandbox-1' && !state.hasPeerUe) {
+        showBadge('UE peer not registered (need --devices 2)', 'error');
+        return;
+    }
+    const body = (els.messageBody.value || '').trim();
+    if (!body) return;
+    els.messageSend.disabled = true;
+    try {
+        const resp = await fetch(`/devices/${encodeURIComponent(state.focusDeviceId)}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to, body }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+            showBadge(data.error || `send failed (${resp.status})`, 'error');
+            return;
+        }
+        // List row only — Activity log comes from SSE (queued → in_flight → delivered).
+        // Do not append HTTP "accepted" here; it races after delivery and looks wrong.
+        upsertMessage({
+            id: data.id,
+            from: state.focusDeviceId,
+            to,
+            status: 'queued',
+            body,
+            at: new Date().toISOString(),
+        });
+        if (data.id) {
+            try {
+                const st = await fetch(`/messages/${encodeURIComponent(data.id)}`);
+                if (st.ok) {
+                    const full = await st.json();
+                    upsertMessage({
+                        id: full.id,
+                        from: full.from,
+                        to: full.to,
+                        status: full.status,
+                        body: full.body,
+                        at: full.delivered_at || full.accepted_at || new Date().toISOString(),
+                    });
+                }
+            } catch (_) { /* ignore */ }
+        }
+        els.messageBody.value = '';
+    } catch (err) {
+        showBadge('send failed', 'error');
+    } finally {
+        els.messageSend.disabled = false;
+    }
 }
 
 // --- Profile fetch ---
@@ -478,3 +759,15 @@ setTimeout(async () => {
 
 fetchProfile();
 connect();
+refreshPeerDevices();
+setInterval(refreshPeerDevices, 2000);
+setInterval(pollPeerCondition, 1000);
+if (els.messageForm) {
+    els.messageForm.addEventListener('submit', sendMessageFromForm);
+}
+if (els.messageTo) {
+    els.messageTo.addEventListener('change', updateMessageDestinationUI);
+}
+updateMessageDestinationUI();
+renderMessageLog();
+renderMessages();

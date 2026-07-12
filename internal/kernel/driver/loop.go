@@ -20,6 +20,9 @@ type Config struct {
 	// Bus publishes events to subscribers.
 	Bus *eventbus.Bus
 
+	// DeviceID tags published coverage/link events (e.g. sandbox-0).
+	DeviceID string
+
 	// LookaheadSec is how far in advance (in seconds) to announce an
 	// upcoming coverage transition. Copied from the profile's schedule
 	// at construction time so the driver doesn't need access to the
@@ -49,6 +52,7 @@ type Loop struct {
 	advancer     condition.Advancer   // nil if eval doesn't implement Advancer
 	positioner   condition.Positioner // nil if eval doesn't implement Positioner
 	bus          *eventbus.Bus
+	deviceID     string
 	lookaheadSec float64
 	tickCh       <-chan time.Time
 	interval     time.Duration
@@ -85,6 +89,7 @@ func New(cfg Config) *Loop {
 		advancer:     adv,
 		positioner:   pos,
 		bus:          cfg.Bus,
+		deviceID:     cfg.DeviceID,
 		lookaheadSec: cfg.LookaheadSec,
 		tickCh:       cfg.TickCh,
 		interval:     interval,
@@ -136,13 +141,15 @@ func (l *Loop) tick() {
 		l.prevInCoverage = cov.InCoverage
 		if cov.InCoverage {
 			l.bus.PublishCoverageEvent(eventbus.CoverageEvent{
-				Kind: eventbus.KindWindowOpened,
-				At:   now,
+				Kind:     eventbus.KindWindowOpened,
+				At:       now,
+				DeviceID: l.deviceID,
 			})
 		} else {
 			l.bus.PublishCoverageEvent(eventbus.CoverageEvent{
-				Kind: eventbus.KindWindowClosed,
-				At:   now,
+				Kind:     eventbus.KindWindowClosed,
+				At:       now,
+				DeviceID: l.deviceID,
 			})
 		}
 	} else if cov.InCoverage != l.prevInCoverage {
@@ -150,15 +157,17 @@ func (l *Loop) tick() {
 		l.prevInCoverage = cov.InCoverage
 		if cov.InCoverage {
 			l.bus.PublishCoverageEvent(eventbus.CoverageEvent{
-				Kind: eventbus.KindWindowOpened,
-				At:   now,
+				Kind:     eventbus.KindWindowOpened,
+				At:       now,
+				DeviceID: l.deviceID,
 			})
 			l.lookaheadOpenFired = false
 			l.lookaheadCloseFired = false
 		} else {
 			l.bus.PublishCoverageEvent(eventbus.CoverageEvent{
-				Kind: eventbus.KindWindowClosed,
-				At:   now,
+				Kind:     eventbus.KindWindowClosed,
+				At:       now,
+				DeviceID: l.deviceID,
 			})
 			l.lookaheadOpenFired = false
 			l.lookaheadCloseFired = false
@@ -170,22 +179,28 @@ func (l *Loop) tick() {
 		if cov.InCoverage && !l.lookaheadCloseFired && cov.UntilNextTransitionSec <= l.lookaheadSec {
 			l.lookaheadCloseFired = true
 			l.bus.PublishCoverageEvent(eventbus.CoverageEvent{
-				Kind: eventbus.KindWindowClosing,
-				At:   now,
+				Kind:     eventbus.KindWindowClosing,
+				At:       now,
+				DeviceID: l.deviceID,
 			})
 		}
 		if !cov.InCoverage && !l.lookaheadOpenFired && cov.UntilNextTransitionSec <= l.lookaheadSec {
 			l.lookaheadOpenFired = true
 			l.bus.PublishCoverageEvent(eventbus.CoverageEvent{
-				Kind: eventbus.KindWindowOpening,
-				At:   now,
+				Kind:     eventbus.KindWindowOpening,
+				At:       now,
+				DeviceID: l.deviceID,
 			})
 		}
 	}
 
 	// Publish link state while in coverage.
 	if cov.InCoverage {
-		l.bus.PublishLinkState(link, now)
+		l.bus.PublishLinkStateEvent(eventbus.LinkStateEvent{
+			State:    link,
+			At:       now,
+			DeviceID: l.deviceID,
+		})
 	}
 
 	// Publish satellite position every ~1s (elapsed-time throttled).
