@@ -22,6 +22,14 @@
         android:textSize="14sp" />
 
     <TextView
+        android:id="@+id/lookaheadText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="lookahead: …"
+        android:textSize="13sp" />
+
+    <TextView
         android:id="@+id/detailText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

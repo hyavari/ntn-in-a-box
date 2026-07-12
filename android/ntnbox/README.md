@@ -1,9 +1,10 @@
 # ntnbox Android companion
 
-Client library for NTN-in-a-Box coverage and condition signals.
+Client library for NTN-in-a-Box coverage, condition, and lookahead signals.
 
 - SSE: `GET /events` (coverage kinds) — long-lived; uses no read timeout
 - Poll: `GET /devices/{id}/condition` (countdown + link metrics)
+- Poll: `GET /devices/{id}/lookahead` (absolute open/close, duration, elev)
 - Callbacks + optional Kotlin Flow wrappers
 - `minSdk 26`
 
@@ -45,6 +46,7 @@ val mainExecutor = ContextCompat.getMainExecutor(context)
 client.addListener(mainExecutor, object : NtnBoxListener {
     override fun onCoverageChanged(inCoverage: Boolean, kind: CoverageKind) { /* … */ }
     override fun onCondition(condition: NtnCondition) { /* countdown */ }
+    override fun onLookahead(lookahead: NtnLookahead) { /* open/close / duration */ }
     override fun onConnectionChanged(connected: Boolean) { /* SSE up/down */ }
 })
 client.start()

@@ -44,6 +44,47 @@ class NtnJsonTest {
     }
 
     @Test
+    fun parseLookaheadWithTimesAndNullElev() {
+        val json = """
+            {"in_coverage":false,"until_next_transition_sec":42.5,
+             "next_open_at":"2026-07-12T05:00:00Z","next_close_at":"2026-07-12T05:00:15Z",
+             "next_window_duration_sec":15.0,"effective_lookahead_sec":30.0}
+        """.trimIndent()
+        val la = NtnJson.parseLookahead(json)
+        assertFalse(la.inCoverage)
+        assertEquals(42.5, la.untilNextTransitionSec, 0.001)
+        assertEquals("2026-07-12T05:00:00Z", la.nextOpenAt)
+        assertEquals(15.0, la.nextWindowDurationSec!!, 0.001)
+        assertEquals(30.0, la.effectiveLookaheadSec, 0.001)
+        assertNull(la.maxElevationDeg)
+    }
+
+    @Test
+    fun parseLookaheadContinuousOmitsTimes() {
+        val json = """
+            {"in_coverage":true,"until_next_transition_sec":50.0,
+             "effective_lookahead_sec":0.0}
+        """.trimIndent()
+        val la = NtnJson.parseLookahead(json)
+        assertTrue(la.inCoverage)
+        assertNull(la.nextOpenAt)
+        assertNull(la.nextCloseAt)
+        assertNull(la.nextWindowDurationSec)
+    }
+
+    @Test
+    fun parseLookaheadWithElevation() {
+        val json = """
+            {"in_coverage":true,"until_next_transition_sec":10.0,
+             "next_open_at":"2026-07-12T05:00:00Z","next_close_at":"2026-07-12T05:05:00Z",
+             "next_window_duration_sec":300.0,"effective_lookahead_sec":25.0,
+             "max_elevation_deg":60.0}
+        """.trimIndent()
+        val la = NtnJson.parseLookahead(json)
+        assertEquals(60.0, la.maxElevationDeg!!, 0.001)
+    }
+
+    @Test
     fun parseConditionMissingFieldThrows() {
         try {
             NtnJson.parseCondition("""{"in_coverage":true,"elapsed_sec":1.0}""")

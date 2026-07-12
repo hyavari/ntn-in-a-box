@@ -14,6 +14,19 @@ data class NtnCondition(
 )
 
 /**
+ * Prediction snapshot from GET /devices/{id}/lookahead.
+ */
+data class NtnLookahead(
+    val inCoverage: Boolean,
+    val untilNextTransitionSec: Double,
+    val nextOpenAt: String? = null,
+    val nextCloseAt: String? = null,
+    val nextWindowDurationSec: Double? = null,
+    val effectiveLookaheadSec: Double,
+    val maxElevationDeg: Double? = null,
+)
+
+/**
  * Coverage event kinds from SSE event: coverage (matches ntnbox bus).
  */
 enum class CoverageKind {

@@ -3,19 +3,26 @@ package apihost
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"time"
 
+	"github.com/hyavari/ntn-in-a-box/internal/kernel/condition"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/eventbus"
 )
 
 // sseEvent is the JSON payload for an SSE event.
 type sseCoverageEvent struct {
-	Kind                string  `json:"kind"`
-	InCoverage          bool    `json:"in_coverage"`
-	ElapsedSec          float64 `json:"elapsed_sec"`
-	UntilNextTransition float64 `json:"until_next_transition"`
-	At                  string  `json:"at"`
+	Kind                   string   `json:"kind"`
+	InCoverage             bool     `json:"in_coverage"`
+	ElapsedSec             float64  `json:"elapsed_sec"`
+	UntilNextTransition    float64  `json:"until_next_transition"`
+	At                     string   `json:"at"`
+	LookaheadSec           *float64 `json:"lookahead_sec,omitempty"`
+	NextOpenAt             *string  `json:"next_open_at,omitempty"`
+	NextCloseAt            *string  `json:"next_close_at,omitempty"`
+	NextWindowDurationSec  *float64 `json:"next_window_duration_sec,omitempty"`
+	MaxElevationDeg        *float64 `json:"max_elevation_deg,omitempty"`
 }
 
 type sseLinkStateEvent struct {
@@ -67,6 +74,12 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		} else if payload.ElapsedSec == 0 && payload.UntilNextTransition == 0 {
 			// Fallback: derive from event kind.
 			payload.InCoverage = ev.Kind == eventbus.KindWindowOpened || ev.Kind == eventbus.KindWindowOpening
+		}
+
+		payload.UntilNextTransition = finiteSec(payload.UntilNextTransition)
+
+		if ev.Kind == eventbus.KindWindowOpening || ev.Kind == eventbus.KindWindowClosing {
+			enrichLookaheadCoverage(&payload, s.eval, ev.At)
 		}
 
 		data, err := json.Marshal(payload)
@@ -161,7 +174,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			Kind:                "initial",
 			InCoverage:          cov.InCoverage,
 			ElapsedSec:          cov.ElapsedSec,
-			UntilNextTransition: cov.UntilNextTransitionSec,
+			UntilNextTransition: finiteSec(cov.UntilNextTransitionSec),
 			At:                  now.Format(time.RFC3339),
 		}
 		if data, err := json.Marshal(initial); err == nil {
@@ -184,4 +197,31 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
+}
+
+func enrichLookaheadCoverage(payload *sseCoverageEvent, eval condition.Eval, at time.Time) {
+	provider, ok := eval.(condition.LookaheadProvider)
+	if !ok {
+		return
+	}
+	st := provider.Lookahead(at)
+	payload.LookaheadSec = condition.Float64Ptr(st.ConfiguredLookaheadSec)
+	payload.NextWindowDurationSec = st.NextWindowDurationSec
+	payload.MaxElevationDeg = st.MaxElevationDeg
+	if st.NextOpenAt != nil {
+		s := st.NextOpenAt.UTC().Format(time.RFC3339)
+		payload.NextOpenAt = &s
+	}
+	if st.NextCloseAt != nil {
+		s := st.NextCloseAt.UTC().Format(time.RFC3339)
+		payload.NextCloseAt = &s
+	}
+}
+
+// finiteSec maps Inf/NaN to a large finite value so encoding/json succeeds.
+func finiteSec(v float64) float64 {
+	if math.IsInf(v, 0) || math.IsNaN(v) {
+		return 1e18
+	}
+	return v
 }

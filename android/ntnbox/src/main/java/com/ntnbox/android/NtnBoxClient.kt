@@ -35,13 +35,14 @@ class NtnBoxClient(
     private val deviceId: String = DEFAULT_DEVICE_ID,
     private val conditionPollMs: Long = DEFAULT_POLL_MS,
     httpClient: OkHttpClient = OkHttpClient(),
+    private val leadSec: Double? = null,
 ) {
     private val root = baseUrl.trimEnd('/')
     private val listeners = CopyOnWriteArrayList<ListenerRegistration>()
     private val started = AtomicBoolean(false)
     private val backoff = ReconnectBackoff()
 
-    /** Finite timeouts for one-shot condition GETs. */
+    /** Finite timeouts for one-shot condition / lookahead GETs. */
     private val pollClient: OkHttpClient = httpClient.newBuilder()
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(5, TimeUnit.SECONDS)
@@ -58,6 +59,7 @@ class NtnBoxClient(
     private var eventSource: EventSource? = null
     private var reconnectFuture: ScheduledFuture<*>? = null
     private val inflightPoll = AtomicReference<Call?>(null)
+    private val inflightLookahead = AtomicReference<Call?>(null)
 
     fun addListener(executor: Executor, listener: NtnBoxListener) {
         listeners.add(ListenerRegistration(executor, listener))
@@ -75,7 +77,10 @@ class NtnBoxClient(
         scheduler = sched
         startEventSource(sched)
         pollFuture = sched.scheduleAtFixedRate(
-            { pollCondition() },
+            {
+                pollCondition()
+                pollLookahead()
+            },
             0L,
             conditionPollMs,
             TimeUnit.MILLISECONDS,
@@ -89,6 +94,7 @@ class NtnBoxClient(
         pollFuture?.cancel(false)
         pollFuture = null
         inflightPoll.getAndSet(null)?.cancel()
+        inflightLookahead.getAndSet(null)?.cancel()
         eventSource?.cancel()
         eventSource = null
         scheduler?.shutdownNow()
@@ -121,6 +127,23 @@ class NtnBoxClient(
 
             override fun onCondition(condition: NtnCondition) {
                 trySend(condition)
+            }
+
+            override fun onConnectionChanged(connected: Boolean) = Unit
+        }
+        addListener(Executor { it.run() }, listener)
+        awaitClose { removeListener(listener) }
+    }
+
+    /** Flow of lookahead snapshots. Does not call [start]. */
+    fun lookaheadFlow(): Flow<NtnLookahead> = callbackFlow {
+        val listener = object : NtnBoxListener {
+            override fun onCoverageChanged(inCoverage: Boolean, kind: CoverageKind) = Unit
+
+            override fun onCondition(condition: NtnCondition) = Unit
+
+            override fun onLookahead(lookahead: NtnLookahead) {
+                trySend(lookahead)
             }
 
             override fun onConnectionChanged(connected: Boolean) = Unit
@@ -238,6 +261,40 @@ class NtnBoxClient(
         })
     }
 
+    private fun pollLookahead() {
+        if (!started.get()) return
+        inflightLookahead.getAndSet(null)?.cancel()
+        val lead = leadSec
+        val url = if (lead != null && lead > 0) {
+            "$root/devices/$deviceId/lookahead?lead_sec=$lead"
+        } else {
+            "$root/devices/$deviceId/lookahead"
+        }
+        val request = Request.Builder().url(url).get().build()
+        val call = pollClient.newCall(request)
+        inflightLookahead.set(call)
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                inflightLookahead.compareAndSet(call, null)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                inflightLookahead.compareAndSet(call, null)
+                if (!started.get()) return
+                response.use { resp ->
+                    if (!resp.isSuccessful) return
+                    val body = resp.body?.string() ?: return
+                    if (!started.get()) return
+                    try {
+                        dispatchLookahead(NtnJson.parseLookahead(body))
+                    } catch (_: Exception) {
+                        // ignore malformed
+                    }
+                }
+            }
+        })
+    }
+
     private fun dispatchCoverage(inCoverage: Boolean, kind: CoverageKind) {
         if (!started.get()) return
         for (reg in listeners) {
@@ -255,6 +312,17 @@ class NtnBoxClient(
             reg.executor.execute {
                 if (started.get()) {
                     reg.listener.onCondition(condition)
+                }
+            }
+        }
+    }
+
+    private fun dispatchLookahead(lookahead: NtnLookahead) {
+        if (!started.get()) return
+        for (reg in listeners) {
+            reg.executor.execute {
+                if (started.get()) {
+                    reg.listener.onLookahead(lookahead)
                 }
             }
         }

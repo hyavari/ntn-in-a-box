@@ -3,6 +3,7 @@ package apihost
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -109,6 +110,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /devices", s.handleListDevices)
 	s.mux.HandleFunc("GET /devices/{id}", s.handleGetDevice)
 	s.mux.HandleFunc("GET /devices/{id}/condition", s.handleGetCondition)
+	s.mux.HandleFunc("GET /devices/{id}/lookahead", s.handleGetLookahead)
 	s.mux.HandleFunc("GET /devices/{id}/capabilities", s.handleGetCapabilities)
 	s.mux.HandleFunc("GET /events", s.handleSSE)
 	s.registerUI()
@@ -252,13 +254,75 @@ func (s *Server) handleGetCondition(w http.ResponseWriter, r *http.Request) {
 	resp := conditionResponse{
 		InCoverage:             cov.InCoverage,
 		ElapsedSec:             cov.ElapsedSec,
-		UntilNextTransitionSec: cov.UntilNextTransitionSec,
+		UntilNextTransitionSec: finiteSec(cov.UntilNextTransitionSec),
 	}
 	if cov.InCoverage {
 		resp.DelayMs = link.DelayMs
 		resp.JitterMs = link.JitterMs
 		resp.LossPct = link.LossPct
 		resp.BandwidthKbps = link.BandwidthKbps
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+type lookaheadResponse struct {
+	InCoverage             bool     `json:"in_coverage"`
+	UntilNextTransitionSec float64  `json:"until_next_transition_sec"`
+	NextOpenAt             *string  `json:"next_open_at,omitempty"`
+	NextCloseAt            *string  `json:"next_close_at,omitempty"`
+	NextWindowDurationSec  *float64 `json:"next_window_duration_sec,omitempty"`
+	EffectiveLookaheadSec  float64  `json:"effective_lookahead_sec"`
+	MaxElevationDeg        *float64 `json:"max_elevation_deg,omitempty"`
+}
+
+func (s *Server) handleGetLookahead(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+
+	if _, err := s.registry.Get(id); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+
+	s.mu.RLock()
+	eval, ok := s.evaluators[id]
+	s.mu.RUnlock()
+
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "no evaluator for device: " + id})
+		return
+	}
+
+	provider, ok := eval.(condition.LookaheadProvider)
+	if !ok {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "lookahead not supported for device: " + id})
+		return
+	}
+
+	st := provider.Lookahead(time.Now())
+	until := finiteSec(st.UntilNextTransitionSec)
+
+	effective := st.ConfiguredLookaheadSec
+	if raw := r.URL.Query().Get("lead_sec"); raw != "" {
+		if v, err := strconv.ParseFloat(raw, 64); err == nil && v > 0 {
+			effective = v
+		}
+	}
+
+	resp := lookaheadResponse{
+		InCoverage:             st.InCoverage,
+		UntilNextTransitionSec: until,
+		NextWindowDurationSec:  st.NextWindowDurationSec,
+		EffectiveLookaheadSec:  effective,
+		MaxElevationDeg:        st.MaxElevationDeg,
+	}
+	if st.NextOpenAt != nil {
+		s := st.NextOpenAt.UTC().Format(time.RFC3339)
+		resp.NextOpenAt = &s
+	}
+	if st.NextCloseAt != nil {
+		s := st.NextCloseAt.UTC().Format(time.RFC3339)
+		resp.NextCloseAt = &s
 	}
 
 	writeJSON(w, http.StatusOK, resp)

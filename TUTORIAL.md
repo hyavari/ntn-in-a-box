@@ -220,6 +220,9 @@ programmatically:
 # Current condition (coverage, delay, jitter, loss, bandwidth):
 curl http://localhost:8080/devices/sandbox-0/condition
 
+# Pass lookahead (absolute open/close + duration):
+curl http://localhost:8080/devices/sandbox-0/lookahead
+
 # Satellite capabilities:
 curl http://localhost:8080/devices/sandbox-0/capabilities
 
@@ -290,6 +293,7 @@ Open `http://localhost:8080/ui` for the live visualization. Confirm the API:
 
 ```bash
 curl -s http://localhost:8080/devices/sandbox-0/condition
+curl -s http://localhost:8080/devices/sandbox-0/lookahead
 ```
 
 ### 2) Build and install the sample

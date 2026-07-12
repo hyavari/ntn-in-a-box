@@ -10,6 +10,8 @@ interface NtnBoxListener {
 
     fun onCondition(condition: NtnCondition)
 
+    fun onLookahead(lookahead: NtnLookahead) {}
+
     /** SSE session connected (true) or dropped / stopped (false). */
     fun onConnectionChanged(connected: Boolean)
 }

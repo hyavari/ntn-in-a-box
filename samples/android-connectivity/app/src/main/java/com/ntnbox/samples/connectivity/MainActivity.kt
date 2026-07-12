@@ -9,6 +9,7 @@ import com.ntnbox.android.CoverageKind
 import com.ntnbox.android.NtnBoxClient
 import com.ntnbox.android.NtnBoxListener
 import com.ntnbox.android.NtnCondition
+import com.ntnbox.android.NtnLookahead
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
@@ -27,11 +28,13 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var statusText: TextView
     private lateinit var ntnText: TextView
+    private lateinit var lookaheadText: TextView
     private lateinit var detailText: TextView
 
     private var lastHttpStatus: String = "starting…"
     private var lastHttpDetail: String = ""
     private var lastNtnLine: String = "ntnbox: connecting…"
+    private var lastLookaheadLine: String = "lookahead: …"
     private var ntnConnected: Boolean = false
 
     private val ntnClient = NtnBoxClient()
@@ -59,6 +62,17 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     "ntnbox: $phase · available in ${until}s"
                 }
+                render()
+            }
+        }
+
+        override fun onLookahead(lookahead: NtnLookahead) {
+            handler.post {
+                val dur = lookahead.nextWindowDurationSec?.toInt()?.let { "${it}s window" } ?: "window ?"
+                val open = lookahead.nextOpenAt ?: "?"
+                val close = lookahead.nextCloseAt ?: "?"
+                val elev = lookahead.maxElevationDeg?.let { " · elev ${"%.0f".format(it)}°" } ?: ""
+                lastLookaheadLine = "lookahead: $dur · open $open · close $close$elev"
                 render()
             }
         }
@@ -91,6 +105,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         statusText = findViewById(R.id.statusText)
         ntnText = findViewById(R.id.ntnText)
+        lookaheadText = findViewById(R.id.lookaheadText)
         detailText = findViewById(R.id.detailText)
         lastHttpDetail = "target=$targetUrl\nqueue=0"
         render()
@@ -149,6 +164,7 @@ class MainActivity : AppCompatActivity() {
     private fun render() {
         statusText.text = lastHttpStatus
         ntnText.text = lastNtnLine
+        lookaheadText.text = lastLookaheadLine
         detailText.text = lastHttpDetail + if (ntnConnected) "\nsse=connected" else "\nsse=…"
     }
 

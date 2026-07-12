@@ -249,3 +249,73 @@ func TestSequenceEvaluator_Passes(t *testing.T) {
 		t.Error("Passes()[0].Rise mismatch")
 	}
 }
+
+func TestSequenceEvaluator_Lookahead(t *testing.T) {
+	passes := syntheticPasses()
+	model := DefaultLinkModel()
+	se, err := NewSequenceEvaluator(passes, model, SequenceConfig{
+		Speed:        1.0,
+		StartAt:      passes[0].Rise,
+		LookaheadSec: 25,
+	})
+	if err != nil {
+		t.Fatalf("NewSequenceEvaluator: %v", err)
+	}
+
+	wallStart := time.Now()
+	se.Advance(wallStart)
+
+	st := se.Lookahead(time.Time{})
+	if !st.InCoverage {
+		t.Fatal("expected in coverage at rise")
+	}
+	if st.ConfiguredLookaheadSec != 25 {
+		t.Errorf("ConfiguredLookaheadSec = %v, want 25", st.ConfiguredLookaheadSec)
+	}
+	if st.NextOpenAt == nil || !st.NextOpenAt.Equal(passes[0].Rise) {
+		t.Errorf("NextOpenAt = %v, want %v", st.NextOpenAt, passes[0].Rise)
+	}
+	if st.NextCloseAt == nil || !st.NextCloseAt.Equal(passes[0].Set) {
+		t.Errorf("NextCloseAt = %v, want %v", st.NextCloseAt, passes[0].Set)
+	}
+	if st.MaxElevationDeg == nil || *st.MaxElevationDeg != 60 {
+		t.Errorf("MaxElevationDeg = %v, want 60", st.MaxElevationDeg)
+	}
+
+	// Into gap before pass 2.
+	se.Advance(wallStart.Add(10 * time.Minute))
+	st2 := se.Lookahead(time.Time{})
+	if st2.InCoverage {
+		t.Fatal("expected out of coverage in gap")
+	}
+	if st2.NextOpenAt == nil || !st2.NextOpenAt.Equal(passes[1].Rise) {
+		t.Errorf("NextOpenAt = %v, want %v", st2.NextOpenAt, passes[1].Rise)
+	}
+}
+
+func TestSequenceEvaluator_LookaheadPastLastPass(t *testing.T) {
+	passes := syntheticPasses()
+	model := DefaultLinkModel()
+	se, err := NewSequenceEvaluator(passes, model, SequenceConfig{
+		Speed:   1.0,
+		StartAt: passes[1].Set.Add(-5 * time.Second),
+	})
+	if err != nil {
+		t.Fatalf("NewSequenceEvaluator: %v", err)
+	}
+
+	wallStart := time.Now()
+	se.Advance(wallStart)
+	se.Advance(wallStart.Add(10 * time.Second))
+
+	st := se.Lookahead(time.Time{})
+	if st.InCoverage {
+		t.Fatal("expected out of coverage")
+	}
+	if !math.IsInf(st.UntilNextTransitionSec, 1) {
+		t.Errorf("UntilNextTransitionSec = %v, want +Inf", st.UntilNextTransitionSec)
+	}
+	if st.NextOpenAt != nil || st.NextCloseAt != nil || st.NextWindowDurationSec != nil || st.MaxElevationDeg != nil {
+		t.Errorf("expected omitted absolute fields, got %+v", st)
+	}
+}

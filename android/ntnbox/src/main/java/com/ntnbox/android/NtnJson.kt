@@ -17,6 +17,18 @@ object NtnJson {
         )
     }
 
+    fun parseLookahead(json: String): NtnLookahead {
+        return NtnLookahead(
+            inCoverage = requireBoolean(json, "in_coverage"),
+            untilNextTransitionSec = requireDouble(json, "until_next_transition_sec"),
+            nextOpenAt = optionalString(json, "next_open_at"),
+            nextCloseAt = optionalString(json, "next_close_at"),
+            nextWindowDurationSec = optionalDouble(json, "next_window_duration_sec"),
+            effectiveLookaheadSec = requireDouble(json, "effective_lookahead_sec"),
+            maxElevationDeg = optionalDouble(json, "max_elevation_deg"),
+        )
+    }
+
     data class CoveragePayload(
         val kind: CoverageKind,
         val inCoverage: Boolean,

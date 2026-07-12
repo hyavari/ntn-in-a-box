@@ -3,6 +3,7 @@ package apihost
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -333,6 +334,206 @@ func TestGetCondition(t *testing.T) {
 	}
 	if cond.DelayMs == 0 && cond.BandwidthKbps == 0 {
 		t.Error("expected non-zero link state values while in coverage")
+	}
+}
+
+func TestGetLookahead(t *testing.T) {
+	_, ts := testServer(t)
+
+	body := `{"id":"ue-1","type":"virtual_ue","profile_name":"leo_pass_90s"}`
+	resp, err := http.Post(ts.URL+"/devices", "application/json", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatalf("POST /devices: %v", err)
+	}
+	resp.Body.Close() //nolint:errcheck
+
+	resp2, err := http.Get(ts.URL + "/devices/ue-1/lookahead?lead_sec=60")
+	if err != nil {
+		t.Fatalf("GET /lookahead: %v", err)
+	}
+	defer resp2.Body.Close() //nolint:errcheck
+
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp2.StatusCode)
+	}
+
+	var la lookaheadResponse
+	if err := json.NewDecoder(resp2.Body).Decode(&la); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !la.InCoverage {
+		t.Error("expected in_coverage=true")
+	}
+	if la.NextOpenAt == nil || la.NextCloseAt == nil {
+		t.Error("expected next_open_at and next_close_at")
+	}
+	if la.NextWindowDurationSec == nil || *la.NextWindowDurationSec <= 0 {
+		t.Error("expected next_window_duration_sec")
+	}
+	if la.EffectiveLookaheadSec != 60 {
+		t.Errorf("effective_lookahead_sec = %v, want 60", la.EffectiveLookaheadSec)
+	}
+}
+
+func TestGetLookaheadDeviceNotFound(t *testing.T) {
+	_, ts := testServer(t)
+	resp, err := http.Get(ts.URL + "/devices/nonexistent/lookahead")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+type evalOnlyStub struct{}
+
+func (evalOnlyStub) Evaluate(now time.Time) (condition.LinkState, condition.CoverageState) {
+	return condition.LinkState{}, condition.CoverageState{InCoverage: true, UntilNextTransitionSec: 10}
+}
+
+func TestGetLookaheadNotImplemented(t *testing.T) {
+	srv, ts := testServer(t)
+
+	body := `{"id":"ue-1","type":"virtual_ue","profile_name":"leo_pass_90s"}`
+	resp, err := http.Post(ts.URL+"/devices", "application/json", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatalf("POST /devices: %v", err)
+	}
+	resp.Body.Close() //nolint:errcheck
+
+	srv.RegisterEvaluator("ue-1", evalOnlyStub{})
+
+	resp2, err := http.Get(ts.URL + "/devices/ue-1/lookahead")
+	if err != nil {
+		t.Fatalf("GET /lookahead: %v", err)
+	}
+	defer resp2.Body.Close() //nolint:errcheck
+	if resp2.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("status = %d, want 501", resp2.StatusCode)
+	}
+}
+
+func TestEnrichLookaheadCoverage_Opening(t *testing.T) {
+	p := &profile.Profile{
+		Name: "t",
+		Schedule: profile.Schedule{
+			Mode: profile.ModePeriodic, PeriodSec: 100, WindowSec: 20, LookaheadSec: 10,
+		},
+		Curves: profile.Curves{
+			DelayMs: []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
+			JitterMs: []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
+			LossPct: []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
+			BandwidthKbps: []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
+		},
+	}
+	epoch := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	ev, err := condition.NewEvaluator(*p, epoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	payload := sseCoverageEvent{Kind: string(eventbus.KindWindowOpening)}
+	enrichLookaheadCoverage(&payload, ev, epoch.Add(50*time.Second)) // out of coverage
+	if payload.LookaheadSec == nil || *payload.LookaheadSec != 10 {
+		t.Fatalf("LookaheadSec = %v, want 10", payload.LookaheadSec)
+	}
+	if payload.NextOpenAt == nil || payload.NextCloseAt == nil {
+		t.Fatal("expected next_open_at and next_close_at")
+	}
+	if payload.NextWindowDurationSec == nil || *payload.NextWindowDurationSec != 20 {
+		t.Fatalf("duration = %v, want 20", payload.NextWindowDurationSec)
+	}
+
+	opened := sseCoverageEvent{Kind: string(eventbus.KindWindowOpened)}
+	enrichLookaheadCoverage(&opened, ev, epoch)
+	// enrichment only called for opening/closing in handleSSE; helper itself still fills —
+	// assert helper works; opened path simply isn't invoked from handleSSE.
+}
+
+func TestSSE_LookaheadEnrichmentOnOpening(t *testing.T) {
+	p := &profile.Profile{
+		Name: "t",
+		Schedule: profile.Schedule{
+			Mode: profile.ModePeriodic, PeriodSec: 100, WindowSec: 20, LookaheadSec: 10,
+		},
+		Curves: profile.Curves{
+			DelayMs: []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
+			JitterMs: []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
+			LossPct: []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
+			BandwidthKbps: []profile.Point{{OffsetSec: 0, Value: 1}, {OffsetSec: 20, Value: 1}},
+		},
+	}
+	epoch := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	ev, err := condition.NewEvaluator(*p, epoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	bus := newTestBus()
+	srv := New(Config{
+		Profiles:  []*profile.Profile{p},
+		Registry:  device.NewRegistry(),
+		Bus:       bus,
+		Evaluator: ev,
+	})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	// Drain initial coverage event.
+	buf := make([]byte, 8192)
+	_, _ = resp.Body.Read(buf)
+
+	bus.PublishCoverageEvent(eventbus.CoverageEvent{
+		Kind: eventbus.KindWindowOpening,
+		At:   epoch.Add(50 * time.Second),
+	})
+
+	n, err := resp.Body.Read(buf)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	body := string(buf[:n])
+	if !bytes.Contains([]byte(body), []byte("window_opening")) {
+		t.Fatalf("expected window_opening, got:\n%s", body)
+	}
+	if !bytes.Contains([]byte(body), []byte("lookahead_sec")) {
+		t.Fatalf("expected lookahead_sec enrichment, got:\n%s", body)
+	}
+	if !bytes.Contains([]byte(body), []byte("next_open_at")) {
+		t.Fatalf("expected next_open_at enrichment, got:\n%s", body)
+	}
+
+	bus.PublishCoverageEvent(eventbus.CoverageEvent{
+		Kind: eventbus.KindWindowOpened,
+		At:   epoch,
+	})
+	n, err = resp.Body.Read(buf)
+	if err != nil {
+		t.Fatalf("read opened: %v", err)
+	}
+	openedBody := string(buf[:n])
+	if !bytes.Contains([]byte(openedBody), []byte("window_opened")) {
+		t.Fatalf("expected window_opened, got:\n%s", openedBody)
+	}
+	if bytes.Contains([]byte(openedBody), []byte("lookahead_sec")) {
+		t.Fatalf("window_opened should not include lookahead_sec, got:\n%s", openedBody)
+	}
+}
+
+func TestFiniteSec(t *testing.T) {
+	if got := finiteSec(math.Inf(1)); got != 1e18 {
+		t.Errorf("Inf = %v, want 1e18", got)
+	}
+	if got := finiteSec(12.5); got != 12.5 {
+		t.Errorf("finite = %v, want 12.5", got)
 	}
 }
 

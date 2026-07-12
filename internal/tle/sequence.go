@@ -261,6 +261,46 @@ func (se *SequenceEvaluator) Passes() []Pass {
 	return passes
 }
 
+// Lookahead returns absolute rise/set prediction for the current or next
+// pass. The wall-clock `now` argument is ignored (same as Evaluate).
+func (se *SequenceEvaluator) Lookahead(_ time.Time) condition.LookaheadState {
+	se.mu.RLock()
+	simTime := se.simTime
+	se.mu.RUnlock()
+
+	_, cov := se.stateAt(simTime)
+	st := condition.LookaheadState{
+		InCoverage:             cov.InCoverage,
+		UntilNextTransitionSec: cov.UntilNextTransitionSec,
+		ConfiguredLookaheadSec: se.lookaheadSec,
+	}
+
+	if math.IsInf(cov.UntilNextTransitionSec, 0) {
+		return st
+	}
+
+	for _, entry := range se.entries {
+		pass := entry.pass
+		if !simTime.Before(pass.Rise) && simTime.Before(pass.Set) {
+			dur := pass.Set.Sub(pass.Rise).Seconds()
+			st.NextOpenAt = condition.TimePtr(pass.Rise)
+			st.NextCloseAt = condition.TimePtr(pass.Set)
+			st.NextWindowDurationSec = condition.Float64Ptr(dur)
+			st.MaxElevationDeg = condition.Float64Ptr(pass.MaxElevDeg)
+			return st
+		}
+		if simTime.Before(pass.Rise) {
+			dur := pass.Set.Sub(pass.Rise).Seconds()
+			st.NextOpenAt = condition.TimePtr(pass.Rise)
+			st.NextCloseAt = condition.TimePtr(pass.Set)
+			st.NextWindowDurationSec = condition.Float64Ptr(dur)
+			st.MaxElevationDeg = condition.Float64Ptr(pass.MaxElevDeg)
+			return st
+		}
+	}
+	return st
+}
+
 // LookaheadSec returns the configured lookahead.
 func (se *SequenceEvaluator) LookaheadSec() float64 {
 	return se.lookaheadSec
