@@ -68,10 +68,10 @@ type Model struct {
 	replayAgain   bool  // set when user chooses to replay again
 
 	// Store-and-forward message list (newest at end; upsert by id).
-	messages       []messageRow
-	messageScroll  int
-	messageCap     int
-	messageFollow  bool // auto-scroll to newest on append
+	messages      []messageRow
+	messageScroll int
+	messageCap    int
+	messageFollow bool // auto-scroll to newest on append
 
 	// Multi-device focus (coverage/link filter); empty = show all / primary.
 	focusDeviceID string
