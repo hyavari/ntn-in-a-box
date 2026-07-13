@@ -50,6 +50,8 @@ func runViaDarwinDocker(args []string) error {
 		}
 		dockerArgs = append(dockerArgs, "-v", absProfile+":/tmp/profile.yaml:ro")
 		containerCmd = []string{"run", "--profile", "/tmp/profile.yaml"}
+		// Pass through --devices / --phase-sec and any other profile-mode flags.
+		containerCmd = append(containerCmd, parsed.extraArgs...)
 	} else {
 		absTLE, err := filepath.Abs(parsed.tlePath)
 		if err != nil {

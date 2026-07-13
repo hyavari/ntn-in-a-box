@@ -22,7 +22,8 @@ Device id: **`sandbox-0`**. Do not use `serve --no-device` unless you `POST /dev
 
 Multi-device (phase offset — synthetic staggered windows):
 `./ntnbox serve --profile … --devices 2 --phase-sec 240`  
-(`run` does **not** take `--devices` / `--phase-sec`.)
+Same flags work on `ntnbox run --profile … --devices 2 --phase-sec 240 --addr … -- …`
+(netns shaping still follows `sandbox-0` only; peers are for messaging/API/TUI).
 
 Multi-device (TLE dual-observer — real geography, e.g. SF + NYC):
 ```bash
@@ -107,9 +108,8 @@ Use `--addr 0.0.0.0:8080` only on trusted networks.
 
 Submit anytime; `cloud` is always “in coverage” so delivery is immediate through
 the mock IMS. UE→UE uses the same API with `to: "sandbox-1"` — register a peer
-via `serve --devices 2 --phase-sec …` or two `--observer`s (not a single-device
-`run --profile`). The kernel holds the message until the **recipient** gets
-`window_opened`.
+via `--devices 2 --phase-sec …` on `serve` or `run`, or two `--observer`s on TLE.
+The kernel holds the message until the **recipient** gets `window_opened`.
 
 Companion: `sendMessage`, `fetchInbox`, `onMessage` / `messageFlow`.
 

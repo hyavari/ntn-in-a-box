@@ -47,6 +47,8 @@ func runRun(args []string) error {
 	addr := fs.String("addr", "", "Optionally expose the API host (host:port); bare :port binds 127.0.0.1")
 	tuiFlag := fs.Bool("tui", false, "Show a live TUI dashboard instead of scrolling output")
 	recordPath := fs.String("record", "", "Record bus events to a JSONL file")
+	numDevices := fs.Int("devices", 1, "Number of sandbox devices (sandbox-0..); profile mode only")
+	phaseSec := fs.Float64("phase-sec", 0, "Phase offset seconds between device epochs; profile mode only")
 
 	// TLE flags.
 	tlePath := fs.String("tle", "", "Path to TLE file (mutually exclusive with --profile)")
@@ -71,15 +73,24 @@ func runRun(args []string) error {
 		return errors.New("flags --tle and --profile are mutually exclusive")
 	}
 	if *profilePath == "" && *tlePath == "" {
-		return errors.New("--profile or --tle is required\n\nUsage: ntnbox run --profile <path> -- <cmd> [args...]\n       ntnbox run --tle <path> --lat <deg> --lon <deg> -- <cmd> [args...]\n       ntnbox run --tle <path> --observer id=lat,lon [--observer …] -- <cmd> [args...]")
+		return errors.New("--profile or --tle is required\n\nUsage: ntnbox run --profile <path> [--devices N] [--phase-sec S] -- <cmd> [args...]\n       ntnbox run --tle <path> --lat <deg> --lon <deg> -- <cmd> [args...]\n       ntnbox run --tle <path> --observer id=lat,lon [--observer …] -- <cmd> [args...]")
+	}
+	if *numDevices < 1 {
+		return errors.New("--devices must be >= 1")
 	}
 
 	parsedObservers, err := parseObserverFlags(observerFlags)
 	if err != nil {
 		return err
 	}
+	if err := rejectObserverDeviceMix(parsedObservers, *numDevices, *phaseSec); err != nil {
+		return err
+	}
 	if *profilePath != "" && len(parsedObservers) > 0 {
 		return errors.New("--observer requires --tle (not --profile)")
+	}
+	if *tlePath != "" && (*numDevices != 1 || *phaseSec != 0) {
+		return errors.New("--devices / --phase-sec are profile-mode only (use --observer for TLE multi-device)")
 	}
 
 	// Everything after "--" is the user's command.
@@ -89,6 +100,10 @@ func runRun(args []string) error {
 	}
 
 	// Build the evaluator and related state depending on mode.
+	type deviceEval struct {
+		id   string
+		eval condition.Eval
+	}
 	var (
 		eval         condition.Eval
 		seqEval      *tle.SequenceEvaluator // non-nil in TLE mode (primary)
@@ -98,6 +113,7 @@ func runRun(args []string) error {
 		initialState condition.LinkState
 		profileName  string
 		tleModel     *tle.LinkModel // non-nil in TLE mode; reused by TUI
+		deviceEvals  []deviceEval   // profile multi-device or empty (TLE uses tb)
 	)
 
 	if *tlePath != "" {
@@ -164,23 +180,26 @@ func runRun(args []string) error {
 				return fmt.Errorf("registering device: %w", err)
 			}
 		}
-	} else {
-		if _, err := registry.Register("sandbox-0", device.TypeVirtualUE, profileName); err != nil {
-			return fmt.Errorf("registering device: %w", err)
+	} else if p != nil {
+		base := time.Now()
+		for i := 0; i < *numDevices; i++ {
+			id := fmt.Sprintf("sandbox-%d", i)
+			if _, err := registry.Register(id, device.TypeVirtualUE, profileName); err != nil {
+				return fmt.Errorf("registering device: %w", err)
+			}
+			epoch := base.Add(time.Duration(float64(i)**phaseSec) * time.Second)
+			ev, err := condition.NewEvaluator(*p, epoch)
+			if err != nil {
+				return fmt.Errorf("creating evaluator for %s: %w", id, err)
+			}
+			deviceEvals = append(deviceEvals, deviceEval{id: id, eval: ev})
+			if i == 0 {
+				eval = ev
+			}
 		}
-	}
-
-	// In profile mode, create the standard evaluator.
-	if p != nil && eval == nil {
-		dev, err := registry.Get("sandbox-0")
-		if err != nil {
-			return fmt.Errorf("sandbox-0: %w", err)
+		if *numDevices > 1 {
+			fmt.Fprintf(os.Stderr, "ntnbox: devices=%d phase-sec=%.0f\n", *numDevices, *phaseSec)
 		}
-		condEval, err := condition.NewEvaluator(*p, dev.CreatedAt)
-		if err != nil {
-			return fmt.Errorf("creating evaluator: %w", err)
-		}
-		eval = condEval
 	}
 
 	bus := eventbus.New(eventbus.DefaultLinkStateThrottle)
@@ -230,7 +249,9 @@ func runRun(args []string) error {
 				rec.RegisterDevice(d.ID, d.Eval)
 			}
 		} else {
-			rec.RegisterDevice("sandbox-0", eval)
+			for _, de := range deviceEvals {
+				rec.RegisterDevice(de.id, de.eval)
+			}
 		}
 		bus.SubscribeCoverage(rec.OnCoverage)
 		bus.SubscribeLinkState(rec.OnLinkState)
@@ -261,12 +282,25 @@ func runRun(args []string) error {
 			for _, d := range tb.Devices {
 				srv.RegisterEvaluator(d.ID, d.Eval)
 			}
+		} else {
+			for _, de := range deviceEvals {
+				srv.RegisterEvaluator(de.id, de.eval)
+			}
 		}
 		sandbox.RegisterRoutes(srv)
 		// Late POST /devices need their own driver so messaging can flush on window_opened.
 		// Must be set before listenAPIHost to avoid a registration race.
+		known := map[string]bool{"sandbox-0": true}
+		for _, de := range deviceEvals {
+			known[de.id] = true
+		}
+		if tb != nil {
+			for _, d := range tb.Devices {
+				known[d.ID] = true
+			}
+		}
 		srv.OnDeviceRegistered(func(id string, deviceEval condition.Eval) {
-			if id == "sandbox-0" {
+			if known[id] {
 				return
 			}
 			go driver.New(driver.Config{
@@ -279,7 +313,7 @@ func runRun(args []string) error {
 		listenAPIHost(srv, *addr, eval)
 	}
 
-	// Start driver loop(s): primary sandbox-0, plus peer TLE observers.
+	// Start driver loop(s): primary + peer TLE observers or phase-offset peers.
 	if tb != nil {
 		for i, d := range tb.Devices {
 			go driver.New(driver.Config{
@@ -291,12 +325,14 @@ func runRun(args []string) error {
 			}).Run(loopCtx)
 		}
 	} else {
-		go driver.New(driver.Config{
-			Evaluator:    eval,
-			Bus:          bus,
-			DeviceID:     "sandbox-0",
-			LookaheadSec: lookaheadSec,
-		}).Run(loopCtx)
+		for _, de := range deviceEvals {
+			go driver.New(driver.Config{
+				Evaluator:    de.eval,
+				Bus:          bus,
+				DeviceID:     de.id,
+				LookaheadSec: lookaheadSec,
+			}).Run(loopCtx)
+		}
 	}
 
 	// TUI mode: the TUI owns the terminal and manages the child process.
@@ -333,8 +369,13 @@ func runRun(args []string) error {
 				evals[d.ID] = d.Eval
 			}
 		} else {
-			deviceIDs = []string{"sandbox-0"}
-			evals["sandbox-0"] = eval
+			for _, de := range deviceEvals {
+				deviceIDs = append(deviceIDs, de.id)
+				evals[de.id] = de.eval
+			}
+			if len(deviceIDs) > 0 {
+				focusID = deviceIDs[0]
+			}
 		}
 		return ntntui.Run(ctx, ntntui.Config{
 			Bus:           bus,
@@ -352,8 +393,17 @@ func runRun(args []string) error {
 
 	// Non-TUI mode: scrolling output (existing behavior).
 
-	// Subscribe a stderr logger for coverage transitions.
+	// Subscribe a stderr logger for coverage transitions (primary only).
 	bus.SubscribeCoverage(func(ev eventbus.CoverageEvent) {
+		primaryLogID := "sandbox-0"
+		if tb != nil && len(tb.Devices) > 0 {
+			primaryLogID = tb.Devices[0].ID
+		} else if len(deviceEvals) > 0 {
+			primaryLogID = deviceEvals[0].id
+		}
+		if ev.DeviceID != "" && ev.DeviceID != primaryLogID {
+			return
+		}
 		switch ev.Kind {
 		case eventbus.KindWindowOpened:
 			_, cov := eval.Evaluate(ev.At)

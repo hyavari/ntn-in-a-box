@@ -280,7 +280,7 @@ func (m Model) renderHelpLine() string {
 		help = styleDim.Render(keys)
 	}
 	if m.addr != "" {
-		help += "\n" + styleDim.Render(" GUI :"+addrPort(m.addr)+"/ui")
+		help += "\n" + styleDim.Render(" http://localhost:"+addrPort(m.addr)+"/ui")
 	}
 	return help
 }
