@@ -16,13 +16,21 @@ import (
 
 // SessionInfo describes the current session mode for the GUI frontend.
 type SessionInfo struct {
-	Mode           string       `json:"mode"`
-	SatelliteName  string       `json:"satellite_name,omitempty"`
-	ObserverLatDeg float64      `json:"observer_lat_deg,omitempty"`
-	ObserverLonDeg float64      `json:"observer_lon_deg,omitempty"`
-	ObserverAltKm  float64      `json:"observer_alt_km,omitempty"`
-	ProfileName    string       `json:"profile_name,omitempty"`
-	OrbitPoints    [][3]float64 `json:"orbit_points,omitempty"`
+	Mode           string         `json:"mode"`
+	SatelliteName  string         `json:"satellite_name,omitempty"`
+	ObserverLatDeg float64        `json:"observer_lat_deg,omitempty"`
+	ObserverLonDeg float64        `json:"observer_lon_deg,omitempty"`
+	ObserverAltKm  float64        `json:"observer_alt_km,omitempty"`
+	Observers      []ObserverInfo `json:"observers,omitempty"`
+	ProfileName    string         `json:"profile_name,omitempty"`
+	OrbitPoints    [][3]float64   `json:"orbit_points,omitempty"`
+}
+
+// ObserverInfo is one ground pin for TLE multi-observer sessions.
+type ObserverInfo struct {
+	ID     string  `json:"id"`
+	LatDeg float64 `json:"lat_deg"`
+	LonDeg float64 `json:"lon_deg"`
 }
 
 // Server is the kernel's HTTP API host. It exposes health, profile,

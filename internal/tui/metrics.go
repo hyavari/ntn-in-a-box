@@ -40,6 +40,8 @@ func (m Model) renderLeftPanel(width int) string {
 	sections = append(sections, "") // blank separator
 	sections = append(sections, m.renderLinkMetrics(width))
 	sections = append(sections, "") // blank separator
+	sections = append(sections, m.renderMessages(width))
+	sections = append(sections, "") // blank separator
 	sections = append(sections, m.renderProfileInfo())
 	sections = append(sections, "") // blank separator
 	sections = append(sections, m.renderHelpLine())
@@ -206,6 +208,40 @@ func formatMetricValue(val float64, unit string) string {
 	return s
 }
 
+// renderMessages renders the store-and-forward message list (no body).
+func (m Model) renderMessages(width int) string {
+	var lines []string
+	lines = append(lines, styleDim.Render(" Messages"))
+	if len(m.messages) == 0 {
+		lines = append(lines, styleDim.Render(" (no messages)"))
+		return strings.Join(lines, "\n")
+	}
+
+	start := m.messageScroll
+	if start < 0 {
+		start = 0
+	}
+	end := start + messageVisibleRows
+	if end > len(m.messages) {
+		end = len(m.messages)
+	}
+	for _, row := range m.messages[start:end] {
+		id := row.ID
+		if len(id) > 12 {
+			id = id[:12]
+		}
+		line := fmt.Sprintf(" %s  %s→%s  %s", id, row.From, row.To, row.Status)
+		if lipgloss.Width(line) > width {
+			line = truncateToWidth(line, width)
+		}
+		lines = append(lines, styleWhite.Render(line))
+	}
+	if len(m.messages) > messageVisibleRows {
+		lines = append(lines, styleDim.Render(fmt.Sprintf(" [%d/%d] J/K scroll", end, len(m.messages))))
+	}
+	return strings.Join(lines, "\n")
+}
+
 // renderProfileInfo renders static profile metadata.
 func (m Model) renderProfileInfo() string {
 	mode := string(m.profile.Schedule.Mode)
@@ -230,7 +266,7 @@ func (m Model) renderHelpLine() string {
 	if m.isReplay && m.replayDone {
 		help = styleProgressGreen.Render(" [r]eplay again") + styleDim.Render(" · [q]uit")
 	} else {
-		help = styleDim.Render(" [q]uit [f]ollow [Tab]expand [↑↓]scroll")
+		help = styleDim.Render(" [q]uit [f]ollow [Tab]expand [↑↓]scroll [J/K]msgs")
 	}
 	if m.addr != "" {
 		help += "\n" + styleDim.Render(" GUI: http://localhost:"+addrPort(m.addr)+"/ui")

@@ -23,13 +23,23 @@ const state = {
     messageLog: [], // activity lines (mirrors CLI)
     // Primary device for metrics panel (multi-device: ignore other device_ids).
     focusDeviceId: 'sandbox-0',
+    // Second device for peer UE messaging / peer strip (profile or TLE).
+    peerDeviceId: '',
     hasPeerUe: false,
     peer: {
         inCoverage: false,
         untilNext: 0,
         kind: '',
     },
+    // Per-device in-coverage for globe multi-pin beams.
+    coverageByDevice: {},
+    // From session_info.observers (TLE multi-pin).
+    observers: [],
 };
+
+// Match globe-view.js pin palette.
+const OBSERVER_PIN_COLORS = ['#ff4444', '#44aaff', '#ffaa44', '#aa44ff'];
+
 
 const MAX_HISTORY = 20;
 
@@ -70,11 +80,15 @@ const els = {
     messagesList: $('messagesList'),
     messagesEmpty: $('messagesEmpty'),
     messagesHint: $('messagesHint'),
+    messagesExplain: $('messagesExplain'),
     messagesLog: $('messagesLog'),
     messagesUeHint: $('messagesUeHint'),
     peerStrip: $('peerStrip'),
+    peerStripLabel: $('peerStripLabel'),
     peerStatus: $('peerStatus'),
     peerCountdown: $('peerCountdown'),
+    globeLegend: $('globeLegend'),
+    globeCaption: $('globeCaption'),
     messageForm: $('messageForm'),
     messageTo: $('messageTo'),
     messageToUe: $('messageToUe'),
@@ -156,22 +170,44 @@ function connect() {
             els.profileMode.textContent = 'tle (orbital)';
             const lat = info.observer_lat_deg?.toFixed(2) || '?';
             const lon = info.observer_lon_deg?.toFixed(2) || '?';
-            els.profileSchedule.textContent = `observer: ${lat}\u00B0, ${lon}\u00B0`;
+            if (info.observers && info.observers.length > 1) {
+                state.observers = info.observers;
+                applyObserverRoles();
+                els.profileSchedule.textContent = info.observers
+                    .map((o) => `${o.id} @ ${Number(o.lat_deg).toFixed(1)}°, ${Number(o.lon_deg).toFixed(1)}°`)
+                    .join(' · ');
+            } else {
+                state.observers = info.observers || [];
+                applyObserverRoles();
+                els.profileSchedule.textContent = `observer: ${lat}\u00B0, ${lon}\u00B0`;
+            }
+            renderGlobeLegend();
+            updatePeerStripLabel();
+            updateMessageExplain();
         }
         activateView(info);
     });
 
     es.addEventListener('coverage', (e) => {
         const data = JSON.parse(e.data);
+        const deviceId = data.device_id || state.focusDeviceId;
+        if (typeof data.in_coverage === 'boolean') {
+            state.coverageByDevice[deviceId] = data.in_coverage;
+        }
 
         // Peer UE window progress (multi-device).
-        if (data.device_id === 'sandbox-1') {
+        const peerId = peerDeviceId();
+        if (peerId && data.device_id === peerId) {
             applyPeerCoverage(data);
+            if (activeView) activeView.update(state);
+            renderGlobeLegend();
             return;
         }
 
         // Ignore other devices when device_id is present (multi-device serve).
         if (data.device_id && data.device_id !== state.focusDeviceId && data.kind !== 'initial') {
+            if (activeView) activeView.update(state);
+            renderGlobeLegend();
             return;
         }
 
@@ -210,6 +246,7 @@ function connect() {
         state.hasData = true;
         hideIdle();
         updateAll();
+        renderGlobeLegend();
     });
 
     es.addEventListener('lifecycle', (e) => {
@@ -354,24 +391,64 @@ function escapeHtml(s) {
         .replace(/"/g, '&quot;');
 }
 
+function peerDeviceId() {
+    if (state.peerDeviceId) return state.peerDeviceId;
+    if (state.observers && state.observers.length > 1) return state.observers[1].id;
+    return '';
+}
+
+function applyObserverRoles() {
+    if (state.observers && state.observers.length > 0) {
+        state.focusDeviceId = state.observers[0].id;
+    }
+    if (state.observers && state.observers.length > 1) {
+        state.peerDeviceId = state.observers[1].id;
+    }
+}
+
 function selectedMessageTo() {
     const v = (els.messageTo && els.messageTo.value) || 'cloud';
-    return v === 'sandbox-1' ? 'sandbox-1' : 'cloud';
+    const peer = peerDeviceId();
+    return peer && v === peer ? peer : 'cloud';
+}
+
+function updateMessageExplain() {
+    const focus = state.focusDeviceId || 'sandbox-0';
+    const peer = peerDeviceId() || 'peer';
+    if (els.messagesExplain) {
+        els.messagesExplain.innerHTML =
+            `You are <strong>${escapeHtml(focus)}</strong> (metrics above). Send to ` +
+            `<strong>Network</strong> (cloud) for immediate delivery, or ` +
+            `<strong>UE ${escapeHtml(peer)}</strong> to queue until that peer has coverage.`;
+    }
+    if (els.messageToUe) {
+        els.messageToUe.value = peerDeviceId() || 'sandbox-1';
+        els.messageToUe.textContent = peerDeviceId()
+            ? `UE (${peerDeviceId()})`
+            : 'UE (peer)';
+    }
 }
 
 function updateMessageDestinationUI() {
     if (els.messageToUe) {
         els.messageToUe.disabled = !state.hasPeerUe;
+        const peer = peerDeviceId();
+        if (peer) {
+            els.messageToUe.value = peer;
+            els.messageToUe.textContent = `UE (${peer})`;
+        }
     }
     if (els.messagesUeHint) {
         els.messagesUeHint.hidden = state.hasPeerUe;
     }
-    if (els.messageTo && !state.hasPeerUe && els.messageTo.value === 'sandbox-1') {
+    const peer = peerDeviceId();
+    if (els.messageTo && !state.hasPeerUe && peer && els.messageTo.value === peer) {
         els.messageTo.value = 'cloud';
     }
     const to = selectedMessageTo();
     if (els.messagesHint) {
-        els.messagesHint.textContent = `${state.focusDeviceId} → ${to === 'cloud' ? 'network (cloud)' : 'UE (sandbox-1)'}`;
+        const destLabel = to === 'cloud' ? 'network (cloud)' : `UE (${to})`;
+        els.messagesHint.textContent = `${state.focusDeviceId} → ${destLabel}`;
     }
     updatePeerStrip();
 }
@@ -385,6 +462,48 @@ function applyPeerCoverage(data) {
         state.peer.kind = data.kind;
     }
     updatePeerStrip();
+    renderGlobeLegend();
+}
+
+function updatePeerStripLabel() {
+    if (!els.peerStripLabel) return;
+    const peerId = peerDeviceId();
+    const peer = (state.observers || []).find((o) => o.id === peerId);
+    if (peer) {
+        els.peerStripLabel.textContent =
+            `Peer UE ${peer.id} @ ${Number(peer.lat_deg).toFixed(1)}°, ${Number(peer.lon_deg).toFixed(1)}°`;
+    } else if (peerId) {
+        els.peerStripLabel.textContent = `Peer UE (${peerId})`;
+    } else {
+        els.peerStripLabel.textContent = 'Peer UE';
+    }
+}
+
+function renderGlobeLegend() {
+    if (!els.globeLegend) return;
+    const list = state.observers && state.observers.length
+        ? state.observers
+        : [];
+    if (list.length === 0) {
+        els.globeLegend.hidden = true;
+        if (els.globeCaption) els.globeCaption.hidden = true;
+        return;
+    }
+    els.globeLegend.hidden = false;
+    if (els.globeCaption) els.globeCaption.hidden = false;
+    els.globeLegend.innerHTML = list.map((o, i) => {
+        const color = OBSERVER_PIN_COLORS[i % OBSERVER_PIN_COLORS.length];
+        const inCov = state.coverageByDevice[o.id];
+        const covClass = inCov ? '' : 'out';
+        const covText = inCov === undefined ? '—' : (inCov ? 'IN' : 'OUT');
+        const role = o.id === state.focusDeviceId ? 'you' : 'peer';
+        return `<div class="globe-legend-row">` +
+            `<span class="globe-legend-dot" style="background:${color}"></span>` +
+            `<span><strong>${escapeHtml(o.id)}</strong> <span class="globe-legend-meta">(${role})</span><br>` +
+            `<span class="globe-legend-meta">${Number(o.lat_deg).toFixed(2)}°, ${Number(o.lon_deg).toFixed(2)}°</span></span>` +
+            `<span class="globe-legend-cov ${covClass}">${covText}</span>` +
+            `</div>`;
+    }).join('');
 }
 
 function updatePeerStrip() {
@@ -426,9 +545,10 @@ function formatPeerDuration(sec) {
 }
 
 async function pollPeerCondition() {
-    if (!state.hasPeerUe) return;
+    const peer = peerDeviceId();
+    if (!state.hasPeerUe || !peer) return;
     try {
-        const resp = await fetch('/devices/sandbox-1/condition');
+        const resp = await fetch(`/devices/${encodeURIComponent(peer)}/condition`);
         if (!resp.ok) return;
         const c = await resp.json();
         state.peer.inCoverage = !!c.in_coverage;
@@ -444,11 +564,24 @@ async function refreshPeerDevices() {
         const resp = await fetch('/devices');
         if (!resp.ok) return;
         const list = await resp.json();
-        state.hasPeerUe = Array.isArray(list) && list.some((d) => d && d.id === 'sandbox-1');
+        if (!Array.isArray(list)) {
+            state.hasPeerUe = false;
+        } else {
+            const focus = state.focusDeviceId;
+            const peer = list.find((d) => d && d.id && d.id !== focus && d.id !== 'cloud');
+            state.hasPeerUe = !!peer;
+            if (peer) {
+                state.peerDeviceId = peer.id;
+            } else if (!(state.observers && state.observers.length > 1)) {
+                state.peerDeviceId = '';
+            }
+        }
     } catch (_) {
         state.hasPeerUe = false;
     }
     updateMessageDestinationUI();
+    updatePeerStripLabel();
+    updateMessageExplain();
     if (state.hasPeerUe) {
         pollPeerCondition();
     }
@@ -457,8 +590,9 @@ async function refreshPeerDevices() {
 async function sendMessageFromForm(ev) {
     ev.preventDefault();
     const to = selectedMessageTo();
-    if (to === 'sandbox-1' && !state.hasPeerUe) {
-        showBadge('UE peer not registered (need --devices 2)', 'error');
+    const peer = peerDeviceId();
+    if (peer && to === peer && !state.hasPeerUe) {
+        showBadge('UE peer not registered (need --devices 2 or a second --observer)', 'error');
         return;
     }
     const body = (els.messageBody.value || '').trim();
@@ -578,11 +712,12 @@ function updateScheduleLabels() {
 }
 
 function updateCoverageStatus() {
+    const who = state.focusDeviceId || 'device';
     if (state.inCoverage) {
-        els.coverageIndicator.textContent = '▲ IN COVERAGE';
+        els.coverageIndicator.textContent = `▲ ${who} IN COVERAGE`;
         els.coverageIndicator.classList.remove('out');
     } else {
-        els.coverageIndicator.textContent = '▼ OUT OF COVERAGE';
+        els.coverageIndicator.textContent = `▼ ${who} OUT OF COVERAGE`;
         els.coverageIndicator.classList.add('out');
     }
     els.countdown.textContent = `${Math.round(state.untilNext)}s remaining`;

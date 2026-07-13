@@ -26,6 +26,10 @@ type Config struct {
 	Addr      string           // API host address (for displaying GUI URL)
 	IsReplay  bool             // true when running in replay mode
 
+	// FocusDeviceID, when set, filters coverage/link bus events to that
+	// device (e.g. "sandbox-0") so peer TLE observers do not thrash the panel.
+	FocusDeviceID string
+
 	// NotifySender is called (if non-nil) with the program's Sender
 	// interface before Run blocks. This lets callers start background
 	// goroutines (e.g. the replayer) that send messages into the TUI.
@@ -55,10 +59,13 @@ func Run(ctx context.Context, cfg Config) error {
 	// Save unsubscribe funcs so we can clean up on exit (prevents
 	// subscriber leaks when the loop in replay.go calls Run again).
 	adapter := NewAdapter(program, cfg.Evaluator)
+	adapter.SetFocusDevice(cfg.FocusDeviceID)
 	unsubCoverage := cfg.Bus.SubscribeCoverage(adapter.OnCoverage)
 	unsubLinkState := cfg.Bus.SubscribeLinkState(adapter.OnLinkState)
+	unsubMessage := cfg.Bus.SubscribeMessage(adapter.OnMessage)
 	defer unsubCoverage()
 	defer unsubLinkState()
+	defer unsubMessage()
 
 	// Notify caller with the Sender *before* starting the child so
 	// any goroutines it launches (e.g. the replayer) are guaranteed

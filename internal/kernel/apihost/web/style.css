@@ -848,6 +848,68 @@ body {
     height: 100%;
 }
 
+.globe-legend {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 10px;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    max-width: min(280px, 70%);
+    pointer-events: none;
+}
+
+.globe-legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #e2e8f0;
+    font-size: 11px;
+    line-height: 1.3;
+}
+
+.globe-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.globe-legend-meta {
+    color: #94a3b8;
+    font-size: 10px;
+}
+
+.globe-legend-cov {
+    margin-left: auto;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: #4ade80;
+}
+
+.globe-legend-cov.out {
+    color: #f87171;
+}
+
+.globe-caption {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    right: 10px;
+    z-index: 2;
+    color: #94a3b8;
+    font-size: 10px;
+    text-align: center;
+    pointer-events: none;
+    text-shadow: 0 1px 2px #0a0e1a;
+}
+
 .globe-fallback {
     display: flex;
     align-items: center;

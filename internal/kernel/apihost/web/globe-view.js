@@ -30,6 +30,11 @@ let observerPos = new THREE.Vector3();
 let inCoverage = false;
 let userInteracting = false;
 let lastInteractionTime = 0;
+let camDistance = 3.0;
+
+// Multi-observer pins/beams: [{ id, pos, marker, beam, inCoverage }]
+let observers = [];
+
 
 // --- Public interface ---
 
@@ -40,10 +45,14 @@ export function init(containerEl, sessionInfo) {
     setupLights();
     setupEarth();
     setupAtmosphere();
-    setupObserver(sessionInfo.observer_lat_deg, sessionInfo.observer_lon_deg);
+
+    const list = sessionInfo.observers && sessionInfo.observers.length
+        ? sessionInfo.observers
+        : [{ id: 'sandbox-0', lat_deg: sessionInfo.observer_lat_deg, lon_deg: sessionInfo.observer_lon_deg }];
+    setupObservers(list);
+
     setupOrbitTrack(sessionInfo.orbit_points);
     setupSatellite();
-    setupBeam();
     setupCamera();
     setupControls();
 
@@ -52,7 +61,18 @@ export function init(containerEl, sessionInfo) {
 }
 
 export function update(state) {
-    inCoverage = state.inCoverage;
+    if (state.coverageByDevice) {
+        for (const o of observers) {
+            if (Object.prototype.hasOwnProperty.call(state.coverageByDevice, o.id)) {
+                o.inCoverage = !!state.coverageByDevice[o.id];
+            }
+        }
+    } else {
+        inCoverage = state.inCoverage;
+        if (observers.length === 1) {
+            observers[0].inCoverage = state.inCoverage;
+        }
+    }
     updateBeamVisibility();
 }
 
@@ -93,6 +113,7 @@ export function destroy() {
     }
     scene = camera = renderer = controls = null;
     earthMesh = atmosphereMesh = observerMarker = satelliteMesh = beamLine = orbitLine = null;
+    observers = [];
 }
 
 // --- Setup functions ---
@@ -187,27 +208,53 @@ function setupAtmosphere() {
     scene.add(atmosphereMesh);
 }
 
-function setupObserver(latDeg, lonDeg) {
-    observerPos = latLonToVec3(latDeg, lonDeg, EARTH_RADIUS);
+function setupObservers(list) {
+    observers = [];
+    const colors = [0xff4444, 0x44aaff, 0xffaa44, 0xaa44ff];
+    list.forEach((o, i) => {
+        const pos = latLonToVec3(o.lat_deg, o.lon_deg, EARTH_RADIUS);
+        const color = colors[i % colors.length];
 
-    // Pin: cone pointing outward
-    const coneGeo = new THREE.ConeGeometry(0.015, OBSERVER_PIN_HEIGHT, 8);
-    const coneMat = new THREE.MeshBasicMaterial({ color: 0xff4444 });
-    observerMarker = new THREE.Mesh(coneGeo, coneMat);
+        const coneGeo = new THREE.ConeGeometry(0.015, OBSERVER_PIN_HEIGHT, 8);
+        const coneMat = new THREE.MeshBasicMaterial({ color });
+        const marker = new THREE.Mesh(coneGeo, coneMat);
+        const surfaceNormal = pos.clone().normalize();
+        marker.position.copy(pos.clone().add(surfaceNormal.clone().multiplyScalar(OBSERVER_PIN_HEIGHT / 2)));
+        marker.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), surfaceNormal);
+        scene.add(marker);
 
-    // Position and orient the cone to point outward from Earth surface
-    const surfaceNormal = observerPos.clone().normalize();
-    observerMarker.position.copy(observerPos.clone().add(surfaceNormal.clone().multiplyScalar(OBSERVER_PIN_HEIGHT / 2)));
-    observerMarker.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), surfaceNormal);
+        const baseGeo = new THREE.SphereGeometry(0.012, 8, 8);
+        const baseMat = new THREE.MeshBasicMaterial({ color });
+        const base = new THREE.Mesh(baseGeo, baseMat);
+        base.position.copy(pos);
+        scene.add(base);
 
-    scene.add(observerMarker);
+        const beamMat = new THREE.LineBasicMaterial({
+            color: 0x44ffaa,
+            transparent: true,
+            opacity: 0.6,
+        });
+        const beamGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(0, 0, 0),
+        ]);
+        const beam = new THREE.Line(beamGeo, beamMat);
+        beam.visible = false;
+        scene.add(beam);
 
-    // Small glowing base
-    const baseGeo = new THREE.SphereGeometry(0.012, 8, 8);
-    const baseMat = new THREE.MeshBasicMaterial({ color: 0xff6666 });
-    const base = new THREE.Mesh(baseGeo, baseMat);
-    base.position.copy(observerPos);
-    scene.add(base);
+        observers.push({
+            id: o.id || `sandbox-${i}`,
+            pos,
+            marker,
+            beam,
+            inCoverage: false,
+        });
+    });
+
+    // Legacy single-pin refs for camera framing.
+    observerPos = observers[0] ? observers[0].pos.clone() : new THREE.Vector3(0, EARTH_RADIUS, 0);
+    observerMarker = observers[0] ? observers[0].marker : null;
+    beamLine = observers[0] ? observers[0].beam : null;
 }
 
 function setupOrbitTrack(orbitPoints) {
@@ -275,33 +322,37 @@ function setupSatellite() {
 }
 
 function setupBeam() {
-    const material = new THREE.LineBasicMaterial({
-        color: 0x44ffaa,
-        transparent: true,
-        opacity: 0.6,
-        linewidth: 2,
-    });
-    const geometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(0, 0, 0),
-        new THREE.Vector3(0, 0, 0),
-    ]);
-    beamLine = new THREE.Line(geometry, material);
-    beamLine.visible = false;
-    scene.add(beamLine);
+    // Beams are created per observer in setupObservers.
 }
 
 function setupCamera() {
     const aspect = container.clientWidth / container.clientHeight;
     camera = new THREE.PerspectiveCamera(45, aspect, 0.01, 100);
 
-    // Position camera to see observer from above and slightly to the side
-    const camDir = observerPos.clone().normalize();
-    const camPos = camDir.clone().multiplyScalar(3.0);
-    // Offset slightly for a nice angle
-    camPos.x += 0.5;
-    camPos.y += 0.8;
+    // Frame all observers when possible (dual SF+NYC otherwise hides one pin).
+    let focus = observerPos.clone();
+    let distance = 3.0;
+    if (observers.length > 1) {
+        focus = new THREE.Vector3();
+        observers.forEach((o) => focus.add(o.pos));
+        focus.multiplyScalar(1 / observers.length);
+        let maxSep = 0;
+        for (let i = 0; i < observers.length; i++) {
+            for (let j = i + 1; j < observers.length; j++) {
+                maxSep = Math.max(maxSep, observers[i].pos.distanceTo(observers[j].pos));
+            }
+        }
+        distance = Math.max(3.2, 2.2 + maxSep * 1.8);
+    }
+    camDistance = distance;
+    const camDir = focus.clone().normalize();
+    const camPos = camDir.clone().multiplyScalar(distance);
+    camPos.x += 0.4;
+    camPos.y += 0.7;
     camera.position.copy(camPos);
-    camera.lookAt(observerPos);
+    camera.lookAt(focus);
+    // Keep auto-track aimed at the framing focus for multi-observer.
+    observerPos.copy(focus);
 }
 
 function setupControls() {
@@ -357,27 +408,29 @@ function animate() {
 }
 
 function updateBeamGeometry() {
-    if (!beamLine) return;
-    const positions = beamLine.geometry.attributes.position;
-    if (!positions) return;
-
-    positions.setXYZ(0, currentSatPos.x, currentSatPos.y, currentSatPos.z);
-    positions.setXYZ(1, observerPos.x, observerPos.y, observerPos.z);
-    positions.needsUpdate = true;
+    for (const o of observers) {
+        if (!o.beam) continue;
+        const positions = o.beam.geometry.attributes.position;
+        if (!positions) continue;
+        positions.setXYZ(0, currentSatPos.x, currentSatPos.y, currentSatPos.z);
+        positions.setXYZ(1, o.pos.x, o.pos.y, o.pos.z);
+        positions.needsUpdate = true;
+    }
 }
 
 function updateBeamVisibility() {
-    if (beamLine) {
-        beamLine.visible = inCoverage;
-        beamLine.material.opacity = inCoverage ? 0.6 : 0;
+    for (const o of observers) {
+        if (!o.beam) continue;
+        o.beam.visible = !!o.inCoverage;
+        o.beam.material.opacity = o.inCoverage ? 0.6 : 0;
     }
 }
 
 function autoTrackCamera() {
-    // Gently move camera to keep observer visible
+    // Gently move camera toward the multi-observer framing distance.
     const idealDir = observerPos.clone().normalize();
-    const idealPos = idealDir.clone().multiplyScalar(3.0);
-    idealPos.y += 0.6; // Slight elevation
+    const idealPos = idealDir.clone().multiplyScalar(camDistance);
+    idealPos.y += 0.6;
 
     camera.position.lerp(idealPos, 0.005);
     controls.target.lerp(new THREE.Vector3(0, 0, 0), 0.01);
@@ -385,13 +438,18 @@ function autoTrackCamera() {
 
 // --- Helpers ---
 
+// latLonToVec3 maps geodetic degrees onto a Three.js Y-up sphere whose
+// equirectangular Earth texture (nasa blue marble / three.js planets UV)
+// has its seam at lon ±180°, not lon 0. The +180° longitude offset is
+// required so California is on the Pacific coast of the texture, not the
+// Middle East.
 function latLonToVec3(latDeg, lonDeg, radius) {
-    const lat = latDeg * Math.PI / 180;
-    const lon = lonDeg * Math.PI / 180;
+    const phi = (90 - latDeg) * Math.PI / 180;       // polar angle from +Y
+    const theta = (lonDeg + 180) * Math.PI / 180;    // match texture UV
     return new THREE.Vector3(
-        -radius * Math.cos(lat) * Math.cos(lon),
-         radius * Math.sin(lat),
-         radius * Math.cos(lat) * Math.sin(lon)
+        -radius * Math.sin(phi) * Math.cos(theta),
+         radius * Math.cos(phi),
+         radius * Math.sin(phi) * Math.sin(theta)
     );
 }
 

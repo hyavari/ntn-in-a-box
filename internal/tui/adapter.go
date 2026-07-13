@@ -16,8 +16,9 @@ type Sender interface {
 // subscribes as a CoverageHandler and LinkStateHandler and forwards
 // events as typed tea.Msg values via Send().
 type Adapter struct {
-	sender Sender
-	eval   condition.Eval
+	sender        Sender
+	eval          condition.Eval
+	focusDeviceID string // when set, ignore coverage/link from other devices
 }
 
 // NewAdapter creates an Adapter that sends messages to sender. The
@@ -27,9 +28,25 @@ func NewAdapter(sender Sender, eval condition.Eval) *Adapter {
 	return &Adapter{sender: sender, eval: eval}
 }
 
+// SetFocusDevice limits coverage/link updates to the given device id.
+// Empty DeviceID on events (legacy replay) is still accepted.
+func (a *Adapter) SetFocusDevice(id string) {
+	a.focusDeviceID = id
+}
+
+func (a *Adapter) acceptDevice(deviceID string) bool {
+	if a.focusDeviceID == "" || deviceID == "" {
+		return true
+	}
+	return deviceID == a.focusDeviceID
+}
+
 // OnCoverage is a CoverageHandler that enriches the event with
 // evaluator state (if available) and sends a CoverageMsg.
 func (a *Adapter) OnCoverage(ev eventbus.CoverageEvent) {
+	if !a.acceptDevice(ev.DeviceID) {
+		return
+	}
 	msg := CoverageMsg{
 		Kind:                ev.Kind,
 		InCoverage:          ev.InCoverage,
@@ -52,8 +69,22 @@ func (a *Adapter) OnCoverage(ev eventbus.CoverageEvent) {
 
 // OnLinkState is a LinkStateHandler that sends a LinkStateMsg.
 func (a *Adapter) OnLinkState(ev eventbus.LinkStateEvent) {
+	if !a.acceptDevice(ev.DeviceID) {
+		return
+	}
 	a.sender.Send(LinkStateMsg{
 		State: ev.State,
 		At:    ev.At,
+	})
+}
+
+// OnMessage is a MessageHandler that forwards lifecycle fields only (no body).
+func (a *Adapter) OnMessage(ev eventbus.MessageEvent) {
+	a.sender.Send(MessageLifecycleMsg{
+		ID:     ev.ID,
+		From:   ev.From,
+		To:     ev.To,
+		Status: ev.Status,
+		At:     ev.At,
 	})
 }

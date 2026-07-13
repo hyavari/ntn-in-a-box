@@ -16,8 +16,9 @@ import (
 
 // EventRecord is a single recorded event in JSONL format.
 type EventRecord struct {
-	Type string `json:"type"` // "coverage" or "linkstate"
-	At   string `json:"at"`
+	Type     string `json:"type"` // "coverage" or "linkstate"
+	At       string `json:"at"`
+	DeviceID string `json:"device_id,omitempty"`
 
 	// Coverage fields (when Type == "coverage").
 	Kind                string  `json:"kind,omitempty"`
@@ -34,10 +35,11 @@ type EventRecord struct {
 
 // Recorder subscribes to the event bus and writes events to a JSONL file.
 type Recorder struct {
-	mu   sync.Mutex
-	file *os.File
-	enc  *json.Encoder
-	eval Evaluator
+	mu       sync.Mutex
+	file     *os.File
+	enc      *json.Encoder
+	eval     Evaluator            // fallback / primary
+	byDevice map[string]Evaluator // optional per-device evaluators
 }
 
 // Evaluator is the subset of condition.Evaluator the recorder needs.
@@ -58,12 +60,39 @@ func New(path string, eval Evaluator) (*Recorder, error) {
 	}, nil
 }
 
+// RegisterDevice associates an evaluator with a device id so multi-device
+// coverage rows are enriched from the correct peer evaluator.
+func (r *Recorder) RegisterDevice(id string, eval Evaluator) {
+	if id == "" || eval == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.byDevice == nil {
+		r.byDevice = make(map[string]Evaluator)
+	}
+	r.byDevice[id] = eval
+}
+
+func (r *Recorder) evalFor(deviceID string) Evaluator {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if deviceID != "" && r.byDevice != nil {
+		if e, ok := r.byDevice[deviceID]; ok {
+			return e
+		}
+	}
+	return r.eval
+}
+
 // OnCoverage is a CoverageHandler that records coverage events.
 func (r *Recorder) OnCoverage(ev eventbus.CoverageEvent) {
-	_, cov := r.eval.Evaluate(ev.At)
+	eval := r.evalFor(ev.DeviceID)
+	_, cov := eval.Evaluate(ev.At)
 	rec := EventRecord{
 		Type:                "coverage",
 		At:                  ev.At.Format(time.RFC3339Nano),
+		DeviceID:            ev.DeviceID,
 		Kind:                string(ev.Kind),
 		InCoverage:          cov.InCoverage,
 		ElapsedSec:          cov.ElapsedSec,
@@ -77,6 +106,7 @@ func (r *Recorder) OnLinkState(ev eventbus.LinkStateEvent) {
 	rec := EventRecord{
 		Type:          "linkstate",
 		At:            ev.At.Format(time.RFC3339Nano),
+		DeviceID:      ev.DeviceID,
 		DelayMs:       ev.State.DelayMs,
 		JitterMs:      ev.State.JitterMs,
 		LossPct:       ev.State.LossPct,

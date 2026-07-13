@@ -29,6 +29,11 @@ type Config struct {
 	// profile struct.
 	LookaheadSec float64
 
+	// PublishPosition controls whether this loop emits SatellitePositionEvent.
+	// Peer devices in multi-observer TLE must set false so the globe receives
+	// a single orbital track (not conflicting positions from divergent clocks).
+	PublishPosition *bool
+
 	// TickCh, if non-nil, replaces the real time.Ticker for testing.
 	// Each receive on TickCh triggers one evaluation cycle. When nil,
 	// a real ticker at Interval is used.
@@ -82,7 +87,13 @@ func New(cfg Config) *Loop {
 	}
 	var pos condition.Positioner
 	if p, ok := cfg.Evaluator.(condition.Positioner); ok {
-		pos = p
+		publish := true
+		if cfg.PublishPosition != nil {
+			publish = *cfg.PublishPosition
+		}
+		if publish {
+			pos = p
+		}
 	}
 	return &Loop{
 		eval:         cfg.Evaluator,

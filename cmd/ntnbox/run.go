@@ -50,8 +50,8 @@ func runRun(args []string) error {
 
 	// TLE flags.
 	tlePath := fs.String("tle", "", "Path to TLE file (mutually exclusive with --profile)")
-	tleLat := fs.Float64("lat", 0, "Observer latitude in degrees (required with --tle)")
-	tleLon := fs.Float64("lon", 0, "Observer longitude in degrees (required with --tle)")
+	tleLat := fs.Float64("lat", 0, "Observer latitude in degrees (required with --tle unless --observer)")
+	tleLon := fs.Float64("lon", 0, "Observer longitude in degrees (required with --tle unless --observer)")
 	tleAlt := fs.Float64("alt", 0, "Observer altitude in km")
 	tleLinkModel := fs.String("link-model", "", "Path to custom link model YAML")
 	tleElevMin := fs.Float64("elev-min", 10, "Minimum elevation angle in degrees")
@@ -59,6 +59,8 @@ func runRun(args []string) error {
 	tleStartAt := fs.String("start-at", "", `"next-pass" or RFC3339 timestamp`)
 	tleSpeed := fs.Float64("speed", 1.0, "Gap time acceleration factor")
 	tlePasses := fs.Int("passes", 10, "Number of passes to pre-compute")
+	var observerFlags stringList
+	fs.Var(&observerFlags, "observer", "TLE observer id=lat,lon (repeatable)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -69,7 +71,15 @@ func runRun(args []string) error {
 		return errors.New("flags --tle and --profile are mutually exclusive")
 	}
 	if *profilePath == "" && *tlePath == "" {
-		return errors.New("--profile or --tle is required\n\nUsage: ntnbox run --profile <path> -- <cmd> [args...]\n       ntnbox run --tle <path> --lat <deg> --lon <deg> -- <cmd> [args...]")
+		return errors.New("--profile or --tle is required\n\nUsage: ntnbox run --profile <path> -- <cmd> [args...]\n       ntnbox run --tle <path> --lat <deg> --lon <deg> -- <cmd> [args...]\n       ntnbox run --tle <path> --observer id=lat,lon [--observer …] -- <cmd> [args...]")
+	}
+
+	parsedObservers, err := parseObserverFlags(observerFlags)
+	if err != nil {
+		return err
+	}
+	if *profilePath != "" && len(parsedObservers) > 0 {
+		return errors.New("--observer requires --tle (not --profile)")
 	}
 
 	// Everything after "--" is the user's command.
@@ -81,7 +91,8 @@ func runRun(args []string) error {
 	// Build the evaluator and related state depending on mode.
 	var (
 		eval         condition.Eval
-		seqEval      *tle.SequenceEvaluator // non-nil in TLE mode
+		seqEval      *tle.SequenceEvaluator // non-nil in TLE mode (primary)
+		tb           *tleBootstrap          // non-nil multi/single TLE bootstrap
 		p            *profile.Profile       // nil in TLE mode
 		lookaheadSec float64
 		initialState condition.LinkState
@@ -90,8 +101,6 @@ func runRun(args []string) error {
 	)
 
 	if *tlePath != "" {
-		// TLE mode.
-		// Check --lat and --lon were actually provided.
 		latSet, lonSet := false, false
 		fs.Visit(func(f *flag.Flag) {
 			if f.Name == "lat" {
@@ -101,105 +110,30 @@ func runRun(args []string) error {
 				lonSet = true
 			}
 		})
-		if !latSet || !lonSet {
-			return errors.New("--lat and --lon are required when using --tle")
-		}
-
-		sats, err := tle.ParseFile(*tlePath)
+		observers, err := resolveTLEObservers(parsedObservers, *tleLat, *tleLon, latSet && lonSet)
 		if err != nil {
 			return err
 		}
-
-		sat, err := tle.SelectSatellite(sats, *tleSat)
-		if err != nil {
-			return err
-		}
-
-		if *tleSat == "" && len(sats) > 1 {
-			fmt.Fprintf(os.Stderr, "ntnbox: using satellite %q (NORAD ID %d) — use --sat to select a different one\n",
-				sat.Name, sat.NoradID)
-		}
-
-		// TLE age warning.
-		if age, err := tle.TLEAge(sat, time.Now()); err == nil && age > 14*24*time.Hour {
-			fmt.Fprintf(os.Stderr, "ntnbox: warning: TLE is %.0f days old (accuracy degrades after ~14 days)\n", age.Hours()/24)
-		}
-
-		// Load link model.
-		var model tle.LinkModel
-		if *tleLinkModel != "" {
-			m, err := tle.LoadLinkModel(*tleLinkModel)
-			if err != nil {
-				return err
-			}
-			model = *m
-		} else {
-			model = tle.DefaultLinkModel()
-		}
-		tleModel = &model
-
-		// Predict passes.
-		obs := tle.Observer{LatDeg: *tleLat, LonDeg: *tleLon, AltKm: *tleAlt}
-		cfg := tle.PredictConfig{
-			MinElevDeg: *tleElevMin,
-			Count:      *tlePasses,
-			MaxSearch:  48 * time.Hour,
-		}
-
-		fmt.Fprintf(os.Stderr, "ntnbox: predicting passes for %q from (%.4f°, %.4f°)...\n", sat.Name, *tleLat, *tleLon)
-
-		passes, err := tle.PredictPasses(sat, obs, time.Now(), cfg)
-		if err != nil {
-			return fmt.Errorf("predicting passes: %w", err)
-		}
-		if len(passes) == 0 {
-			return fmt.Errorf("no visible passes found for %q from (%.4f°, %.4f°) in the next 48h — try lowering --elev-min",
-				sat.Name, *tleLat, *tleLon)
-		}
-
-		// Determine start time.
-		var startAt time.Time
-		switch *tleStartAt {
-		case "", "next-pass":
-			startAt = passes[0].Rise.Add(-30 * time.Second)
-		default:
-			t, err := time.Parse(time.RFC3339, *tleStartAt)
-			if err != nil {
-				return fmt.Errorf("invalid --start-at time: %w", err)
-			}
-			startAt = t
-		}
-
-		var seqErr error
-		seqEval, seqErr = tle.NewSequenceEvaluator(passes, model, tle.SequenceConfig{
-			Speed:        *tleSpeed,
-			StartAt:      startAt,
-			LookaheadSec: 30,
-			Observer:     obs,
-			Sat:          sat,
+		tb, err = bootstrapTLE(tleBootstrapOpts{
+			Path:      *tlePath,
+			Sat:       *tleSat,
+			LinkModel: *tleLinkModel,
+			StartAt:   *tleStartAt,
+			AltKm:     *tleAlt,
+			ElevMin:   *tleElevMin,
+			Speed:     *tleSpeed,
+			Passes:    *tlePasses,
+			Observers: observers,
 		})
-		if seqErr != nil {
-			return fmt.Errorf("creating TLE evaluator: %w", seqErr)
+		if err != nil {
+			return err
 		}
-
-		eval = seqEval
-		lookaheadSec = seqEval.LookaheadSec()
-		profileName = fmt.Sprintf("tle:%s", sat.Name)
-
-		// Initial state: use the link model at minimum elevation.
-		delay, jitter, loss, bw := model.Interpolate(model.MinElevDeg)
-		initialState = condition.LinkState{
-			DelayMs:       delay,
-			JitterMs:      jitter,
-			LossPct:       loss,
-			BandwidthKbps: bw,
-		}
-
-		fmt.Fprintf(os.Stderr, "ntnbox: %d passes predicted (next: %s, max elev: %.1f°)\n",
-			len(passes), passes[0].Rise.Format(time.RFC3339), passes[0].MaxElevDeg)
-		if *tleSpeed > 1 {
-			fmt.Fprintf(os.Stderr, "ntnbox: gap acceleration: %.0fx\n", *tleSpeed)
-		}
+		seqEval = tb.Primary
+		eval = tb.Primary
+		lookaheadSec = tb.LookaheadSec
+		profileName = fmt.Sprintf("tle:%s", tb.SatName)
+		initialState = tb.InitialState
+		tleModel = &tb.Model
 	} else {
 		// Profile mode (existing behavior).
 		var err error
@@ -224,13 +158,24 @@ func runRun(args []string) error {
 
 	// Create kernel components.
 	registry := device.NewRegistry()
-	dev, err := registry.Register("sandbox-0", device.TypeVirtualUE, profileName)
-	if err != nil {
-		return fmt.Errorf("registering device: %w", err)
+	if tb != nil {
+		for _, d := range tb.Devices {
+			if _, err := registry.Register(d.ID, device.TypeVirtualUE, profileName); err != nil {
+				return fmt.Errorf("registering device: %w", err)
+			}
+		}
+	} else {
+		if _, err := registry.Register("sandbox-0", device.TypeVirtualUE, profileName); err != nil {
+			return fmt.Errorf("registering device: %w", err)
+		}
 	}
 
 	// In profile mode, create the standard evaluator.
 	if p != nil && eval == nil {
+		dev, err := registry.Get("sandbox-0")
+		if err != nil {
+			return fmt.Errorf("sandbox-0: %w", err)
+		}
 		condEval, err := condition.NewEvaluator(*p, dev.CreatedAt)
 		if err != nil {
 			return fmt.Errorf("creating evaluator: %w", err)
@@ -242,7 +187,7 @@ func runRun(args []string) error {
 
 	// Create namespace.
 	nsExec := netns.ExecReal{}
-	ns := netns.New(dev.ID, nsExec)
+	ns := netns.New("sandbox-0", nsExec)
 
 	fmt.Fprintf(os.Stderr, "ntnbox: creating network namespace %s\n", ns.Name)
 	if err := ns.Create(ctx); err != nil {
@@ -280,6 +225,13 @@ func runRun(args []string) error {
 			return fmt.Errorf("creating recorder: %w", err)
 		}
 		defer rec.Close()
+		if tb != nil {
+			for _, d := range tb.Devices {
+				rec.RegisterDevice(d.ID, d.Eval)
+			}
+		} else {
+			rec.RegisterDevice("sandbox-0", eval)
+		}
 		bus.SubscribeCoverage(rec.OnCoverage)
 		bus.SubscribeLinkState(rec.OnLinkState)
 		fmt.Fprintf(os.Stderr, "ntnbox: recording to %s\n", *recordPath)
@@ -296,16 +248,8 @@ func runRun(args []string) error {
 		}
 		// Build session info for the GUI.
 		var sessInfo *apihost.SessionInfo
-		if seqEval != nil {
-			orbitPoints := tle.ComputeOrbitPoints(seqEval.SatData(), seqEval.SimTime(), 200)
-			sessInfo = &apihost.SessionInfo{
-				Mode:           "tle",
-				SatelliteName:  seqEval.SatData().Name,
-				ObserverLatDeg: seqEval.Observer().LatDeg,
-				ObserverLonDeg: seqEval.Observer().LonDeg,
-				ObserverAltKm:  seqEval.Observer().AltKm,
-				OrbitPoints:    orbitPoints,
-			}
+		if tb != nil {
+			sessInfo = tb.sessionInfo()
 		} else if p != nil {
 			sessInfo = &apihost.SessionInfo{
 				Mode:        "profile",
@@ -313,6 +257,11 @@ func runRun(args []string) error {
 			}
 		}
 		srv := newAPIHost(bus, registry, eval, sessInfo, profiles...)
+		if tb != nil {
+			for _, d := range tb.Devices {
+				srv.RegisterEvaluator(d.ID, d.Eval)
+			}
+		}
 		sandbox.RegisterRoutes(srv)
 		// Late POST /devices need their own driver so messaging can flush on window_opened.
 		// Must be set before listenAPIHost to avoid a registration race.
@@ -330,14 +279,25 @@ func runRun(args []string) error {
 		listenAPIHost(srv, *addr, eval)
 	}
 
-	// Start driver loop for sandbox-0.
-	loop := driver.New(driver.Config{
-		Evaluator:    eval,
-		Bus:          bus,
-		DeviceID:     "sandbox-0",
-		LookaheadSec: lookaheadSec,
-	})
-	go loop.Run(loopCtx)
+	// Start driver loop(s): primary sandbox-0, plus peer TLE observers.
+	if tb != nil {
+		for i, d := range tb.Devices {
+			go driver.New(driver.Config{
+				Evaluator:       d.Eval,
+				Bus:             bus,
+				DeviceID:        d.ID,
+				LookaheadSec:    lookaheadSec,
+				PublishPosition: boolPtr(i == 0), // one orbital track for the globe
+			}).Run(loopCtx)
+		}
+	} else {
+		go driver.New(driver.Config{
+			Evaluator:    eval,
+			Bus:          bus,
+			DeviceID:     "sandbox-0",
+			LookaheadSec: lookaheadSec,
+		}).Run(loopCtx)
+	}
 
 	// TUI mode: the TUI owns the terminal and manages the child process.
 	if *tuiFlag {
@@ -362,11 +322,17 @@ func runRun(args []string) error {
 				tuiProfile = &profile.Profile{Name: profileName}
 			}
 		}
+		focusID := "sandbox-0"
+		if tb != nil && len(tb.Devices) > 0 {
+			// Match FocusDeviceID to the evaluator we enrich from (primary).
+			focusID = tb.Devices[0].ID
+		}
 		return ntntui.Run(ctx, ntntui.Config{
-			Bus:       bus,
-			Evaluator: eval,
-			Profile:   tuiProfile,
-			Addr:      *addr,
+			Bus:           bus,
+			Evaluator:     eval,
+			Profile:       tuiProfile,
+			Addr:          *addr,
+			FocusDeviceID: focusID,
 			CmdFn: func() *exec.Cmd {
 				return ns.Command(cmdArgs[0], cmdArgs[1:]...)
 			},

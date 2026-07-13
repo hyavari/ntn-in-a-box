@@ -61,6 +61,20 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.followMode = true
 			}
 		}
+
+	case "J":
+		maxScroll := len(m.messages) - messageVisibleRows
+		if maxScroll < 0 {
+			maxScroll = 0
+		}
+		if m.messageScroll < maxScroll {
+			m.messageScroll++
+		}
+
+	case "K":
+		if m.messageScroll > 0 {
+			m.messageScroll--
+		}
 	}
 
 	return m, nil

@@ -101,17 +101,22 @@ func (r *Replayer) Run(ctx context.Context) error {
 			r.bus.PublishCoverageEvent(eventbus.CoverageEvent{
 				Kind:                eventbus.CoverageEventKind(rec.Kind),
 				At:                  now,
+				DeviceID:            rec.DeviceID,
 				InCoverage:          rec.InCoverage,
 				ElapsedSec:          rec.ElapsedSec,
 				UntilNextTransition: rec.UntilNextTransition,
 			})
 		case "linkstate":
-			r.bus.PublishLinkState(condition.LinkState{
-				DelayMs:       rec.DelayMs,
-				JitterMs:      rec.JitterMs,
-				LossPct:       rec.LossPct,
-				BandwidthKbps: rec.BandwidthKbps,
-			}, now)
+			r.bus.PublishLinkStateEvent(eventbus.LinkStateEvent{
+				State: condition.LinkState{
+					DelayMs:       rec.DelayMs,
+					JitterMs:      rec.JitterMs,
+					LossPct:       rec.LossPct,
+					BandwidthKbps: rec.BandwidthKbps,
+				},
+				At:       now,
+				DeviceID: rec.DeviceID,
+			})
 		}
 	}
 

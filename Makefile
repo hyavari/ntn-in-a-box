@@ -1,4 +1,4 @@
-.PHONY: build test fmt check-fmt lint vet check docker
+.PHONY: build test fmt check-fmt lint vet check docker assert-demo
 
 build:
 	go build ./...
@@ -22,6 +22,10 @@ lint:
 
 # Run everything CI would run (non-mutating).
 check: check-fmt vet lint test build
+
+# Optional messaging smoke (not part of default check).
+assert-demo:
+	./scripts/assert-demo.sh
 
 # Build the Docker image for Linux-native ntnbox run.
 docker:

@@ -67,6 +67,11 @@ type Model struct {
 	replayErr     error // non-nil if replay failed
 	replayAgain   bool  // set when user chooses to replay again
 
+	// Store-and-forward message list (newest at end; upsert by id).
+	messages      []messageRow
+	messageScroll int
+	messageCap    int
+
 	// API address (for displaying GUI URL).
 	addr string
 
@@ -74,6 +79,11 @@ type Model struct {
 	// and the viewport is initialized.
 	ready bool
 }
+
+const (
+	messageListCap     = 50
+	messageVisibleRows = 8
+)
 
 // NewModel creates an initial model with the given profile and ring
 // buffer capacity.
@@ -83,6 +93,7 @@ func NewModel(p profile.Profile, bufferCapacity int) Model {
 		output:     NewRingBuffer(bufferCapacity),
 		followMode: true,
 		inCoverage: true, // optimistic until first event
+		messageCap: messageListCap,
 	}
 }
 
@@ -140,6 +151,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.linkState = msg.State
 		m.hasLink = true
 		m.pushSparkline(msg.State)
+
+	case MessageLifecycleMsg:
+		m.upsertMessage(messageRow{
+			ID:     msg.ID,
+			From:   msg.From,
+			To:     msg.To,
+			Status: msg.Status,
+		})
 
 	case OutputLineMsg:
 		// Stop showing output once replay is complete (child will be killed on exit).
@@ -245,6 +264,31 @@ func (m *Model) pushSparkline(s condition.LinkState) {
 	m.jitterHistory = pushSample(m.jitterHistory, s.JitterMs, maxSamples)
 	m.lossHistory = pushSample(m.lossHistory, s.LossPct, maxSamples)
 	m.bandwidthHistory = pushSample(m.bandwidthHistory, s.BandwidthKbps, maxSamples)
+}
+
+func (m *Model) upsertMessage(row messageRow) {
+	for i := range m.messages {
+		if m.messages[i].ID == row.ID {
+			m.messages[i] = row
+			return
+		}
+	}
+	m.messages = append(m.messages, row)
+	cap := m.messageCap
+	if cap <= 0 {
+		cap = messageListCap
+	}
+	if len(m.messages) > cap {
+		m.messages = m.messages[len(m.messages)-cap:]
+	}
+	// Keep scroll within bounds after append.
+	maxScroll := len(m.messages) - messageVisibleRows
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if m.messageScroll > maxScroll {
+		m.messageScroll = maxScroll
+	}
 }
 
 func pushSample(history []float64, val float64, max int) []float64 {

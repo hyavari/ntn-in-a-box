@@ -63,7 +63,12 @@
             </div>
 
             <!-- Globe view (TLE mode) — canvas injected by globe-view.js -->
-            <div class="globe-container" id="globeContainer" style="display:none"></div>
+            <div class="globe-container" id="globeContainer" style="display:none">
+                <div class="globe-legend" id="globeLegend" hidden></div>
+                <div class="globe-caption" id="globeCaption" hidden>
+                    Pins = devices · green beam = that device is in coverage
+                </div>
+            </div>
         </div>
 
         <!-- Right: Metrics Panel -->
@@ -140,22 +145,25 @@
                     <span class="messages-hint" id="messagesHint">sandbox-0 → …</span>
                 </div>
                 <p class="messages-explain" id="messagesExplain">
-                    Network (<code>cloud</code>) = SOS backend, delivers immediately.
-                    UE (<code>sandbox-1</code>) = peer phone, waits for that UE’s coverage window.
+                    You are the primary device (metrics above). Send to
+                    <strong>Network</strong> (cloud) for immediate delivery, or
+                    <strong>UE peer</strong> to queue until that peer has coverage.
                 </p>
                 <form class="messages-compose" id="messageForm">
                     <select id="messageTo" class="messages-input messages-to" aria-label="Destination">
                         <option value="cloud">Network (cloud)</option>
-                        <option value="sandbox-1" id="messageToUe" disabled>UE (sandbox-1)</option>
+                        <option value="sandbox-1" id="messageToUe" disabled>UE (peer)</option>
                     </select>
                     <input type="text" id="messageBody" class="messages-input messages-body" placeholder="SOS / message body" maxlength="1024" aria-label="Body" required>
                     <button type="submit" class="messages-send" id="messageSend">Send</button>
                 </form>
                 <div class="messages-ue-hint" id="messagesUeHint" hidden>
-                    UE target needs <code>serve --devices 2</code> (demo: <code>--gui</code> or <code>--to ue</code>).
+                    Peer UE needs a second device:
+                    <code>--devices 2 --phase-sec …</code> or
+                    <code>--tle … --observer id=lat,lon</code> (twice)
                 </div>
                 <div class="peer-strip" id="peerStrip" hidden>
-                    <span class="peer-strip-label">UE sandbox-1</span>
+                    <span class="peer-strip-label" id="peerStripLabel">Peer UE</span>
                     <span class="peer-strip-status" id="peerStatus">—</span>
                     <span class="peer-strip-countdown" id="peerCountdown"></span>
                 </div>

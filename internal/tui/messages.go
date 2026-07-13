@@ -49,3 +49,20 @@ type ReplayProgressMsg struct {
 type ReplayDoneMsg struct {
 	Err error
 }
+
+// MessageLifecycleMsg is a store-and-forward status update (no body).
+type MessageLifecycleMsg struct {
+	ID     string
+	From   string
+	To     string
+	Status string
+	At     time.Time
+}
+
+// messageRow is one row in the TUI message list.
+type messageRow struct {
+	ID     string
+	From   string
+	To     string
+	Status string
+}

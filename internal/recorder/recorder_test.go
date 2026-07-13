@@ -34,8 +34,9 @@ func TestRecorder_WritesEvents(t *testing.T) {
 	now := time.Date(2026, 7, 8, 10, 0, 0, 0, time.UTC)
 
 	rec.OnCoverage(eventbus.CoverageEvent{
-		Kind: eventbus.KindWindowOpened,
-		At:   now,
+		Kind:     eventbus.KindWindowOpened,
+		At:       now,
+		DeviceID: "sandbox-1",
 	})
 
 	rec.OnLinkState(eventbus.LinkStateEvent{
@@ -45,7 +46,8 @@ func TestRecorder_WritesEvents(t *testing.T) {
 			LossPct:       0.2,
 			BandwidthKbps: 20000,
 		},
-		At: now.Add(250 * time.Millisecond),
+		At:       now.Add(250 * time.Millisecond),
+		DeviceID: "sandbox-1",
 	})
 
 	rec.Close()
@@ -82,11 +84,93 @@ func TestRecorder_WritesEvents(t *testing.T) {
 		t.Error("record[0].InCoverage should be true")
 	}
 
+	if records[0].DeviceID != "sandbox-1" {
+		t.Errorf("record[0].DeviceID = %q, want sandbox-1", records[0].DeviceID)
+	}
 	if records[1].Type != "linkstate" {
 		t.Errorf("record[1].Type = %q, want linkstate", records[1].Type)
 	}
 	if records[1].DelayMs != 42 {
 		t.Errorf("record[1].DelayMs = %f, want 42", records[1].DelayMs)
+	}
+	if records[1].DeviceID != "sandbox-1" {
+		t.Errorf("record[1].DeviceID = %q, want sandbox-1", records[1].DeviceID)
+	}
+}
+
+func TestRecorder_UsesDeviceEvaluator(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "peer.jsonl")
+	primary := mockEval{}
+	rec, err := New(path, primary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	peer := mockEvalOut{}
+	rec.RegisterDevice("sandbox-1", peer)
+
+	now := time.Date(2026, 7, 8, 10, 0, 0, 0, time.UTC)
+	rec.OnCoverage(eventbus.CoverageEvent{
+		Kind:     eventbus.KindWindowClosed,
+		At:       now,
+		DeviceID: "sandbox-1",
+	})
+	rec.Close()
+
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	var r EventRecord
+	if err := json.NewDecoder(f).Decode(&r); err != nil {
+		t.Fatal(err)
+	}
+	if r.DeviceID != "sandbox-1" {
+		t.Fatalf("DeviceID=%q", r.DeviceID)
+	}
+	if r.InCoverage {
+		t.Fatal("expected peer evaluator out-of-coverage")
+	}
+}
+
+type mockEvalOut struct{}
+
+func (mockEvalOut) Evaluate(now time.Time) (condition.LinkState, condition.CoverageState) {
+	return condition.LinkState{}, condition.CoverageState{
+		InCoverage:             false,
+		ElapsedSec:             1,
+		UntilNextTransitionSec: 99,
+	}
+}
+
+func TestReplayer_PublishesDeviceID(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "deviceid.jsonl")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString(`{"type":"coverage","kind":"window_opened","device_id":"sandbox-1","at":"2026-07-08T10:00:00Z","in_coverage":true}` + "\n")
+	f.WriteString(`{"type":"linkstate","device_id":"sandbox-1","delay_ms":42,"jitter_ms":5,"loss_pct":0.2,"bandwidth_kbps":20000,"at":"2026-07-08T10:00:00.1Z"}` + "\n")
+	f.Close()
+
+	bus := eventbus.New(eventbus.LinkStateThrottle{Interval: 0, DeltaThreshold: 0})
+	var covEvents []eventbus.CoverageEvent
+	var linkEvents []eventbus.LinkStateEvent
+	bus.SubscribeCoverage(func(ev eventbus.CoverageEvent) { covEvents = append(covEvents, ev) })
+	bus.SubscribeLinkState(func(ev eventbus.LinkStateEvent) { linkEvents = append(linkEvents, ev) })
+
+	replayer := NewReplayer(path, bus, 1000)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := replayer.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(covEvents) != 1 || covEvents[0].DeviceID != "sandbox-1" {
+		t.Fatalf("coverage DeviceID = %v, want sandbox-1", covEvents)
+	}
+	if len(linkEvents) != 1 || linkEvents[0].DeviceID != "sandbox-1" {
+		t.Fatalf("linkstate DeviceID = %v, want sandbox-1", linkEvents)
 	}
 }
 

@@ -195,6 +195,13 @@ func (se *SequenceEvaluator) Evaluate(_ time.Time) (condition.LinkState, conditi
 	return se.stateAt(simTime)
 }
 
+// EvaluateAt returns link/coverage at an explicit simulation time without
+// mutating the evaluator's clock. Used by SyncedEval so peers can evaluate
+// at the master's time without a SetSimTime/Evaluate race.
+func (se *SequenceEvaluator) EvaluateAt(simTime time.Time) (condition.LinkState, condition.CoverageState) {
+	return se.stateAt(simTime)
+}
+
 // stateAt computes link state and coverage state for a given simulation time.
 // Pure function (no mutation).
 func (se *SequenceEvaluator) stateAt(simTime time.Time) (condition.LinkState, condition.CoverageState) {
@@ -267,7 +274,11 @@ func (se *SequenceEvaluator) Lookahead(_ time.Time) condition.LookaheadState {
 	se.mu.RLock()
 	simTime := se.simTime
 	se.mu.RUnlock()
+	return se.LookaheadAt(simTime)
+}
 
+// LookaheadAt is Lookahead at an explicit simulation time (no clock mutation).
+func (se *SequenceEvaluator) LookaheadAt(simTime time.Time) condition.LookaheadState {
 	_, cov := se.stateAt(simTime)
 	st := condition.LookaheadState{
 		InCoverage:             cov.InCoverage,
