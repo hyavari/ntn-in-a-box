@@ -348,3 +348,99 @@ func covEventKinds(events []eventbus.CoverageEvent) []string {
 	}
 	return kinds
 }
+
+type stubPosEval struct {
+	inCov bool
+}
+
+func (s stubPosEval) Evaluate(time.Time) (condition.LinkState, condition.CoverageState) {
+	return condition.LinkState{DelayMs: 1}, condition.CoverageState{InCoverage: s.inCov, UntilNextTransitionSec: 60}
+}
+
+func (s stubPosEval) Position() (latDeg, lonDeg, altKm, elevDeg, azDeg, rangeKm float64) {
+	return 1, 2, 500, 45, 90, 1000
+}
+
+func TestPublishPositionFalseSuppressesEvents(t *testing.T) {
+	bus := eventbus.New(eventbus.DefaultLinkStateThrottle)
+	var mu sync.Mutex
+	var n int
+	bus.SubscribeSatellitePosition(func(ev eventbus.SatellitePositionEvent) {
+		mu.Lock()
+		n++
+		mu.Unlock()
+	})
+
+	tickCh := make(chan time.Time, 10)
+	epoch := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	clk := &clock{t: epoch}
+	off := false
+	loop := New(Config{
+		Evaluator:       stubPosEval{inCov: true},
+		Bus:             bus,
+		TickCh:          tickCh,
+		Now:             clk.now,
+		PublishPosition: &off,
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		loop.Run(ctx)
+		close(done)
+	}()
+
+	for i := 0; i < 5; i++ {
+		clk.set(epoch.Add(time.Duration(i) * time.Second))
+		tickCh <- time.Time{}
+		time.Sleep(2 * time.Millisecond)
+	}
+	cancel()
+	<-done
+
+	mu.Lock()
+	defer mu.Unlock()
+	if n != 0 {
+		t.Fatalf("PublishPosition=false: got %d position events, want 0", n)
+	}
+}
+
+func TestPublishPositionDefaultEmits(t *testing.T) {
+	bus := eventbus.New(eventbus.DefaultLinkStateThrottle)
+	var mu sync.Mutex
+	var n int
+	bus.SubscribeSatellitePosition(func(ev eventbus.SatellitePositionEvent) {
+		mu.Lock()
+		n++
+		mu.Unlock()
+	})
+
+	tickCh := make(chan time.Time, 10)
+	epoch := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	clk := &clock{t: epoch}
+	loop := New(Config{
+		Evaluator: stubPosEval{inCov: true},
+		Bus:       bus,
+		TickCh:    tickCh,
+		Now:       clk.now,
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		loop.Run(ctx)
+		close(done)
+	}()
+
+	clk.set(epoch)
+	tickCh <- time.Time{}
+	time.Sleep(5 * time.Millisecond)
+	cancel()
+	<-done
+
+	mu.Lock()
+	defer mu.Unlock()
+	if n < 1 {
+		t.Fatalf("default PublishPosition: got %d position events, want >= 1", n)
+	}
+}

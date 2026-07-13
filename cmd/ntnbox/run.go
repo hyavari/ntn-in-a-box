@@ -256,7 +256,7 @@ func runRun(args []string) error {
 				ProfileName: p.Name,
 			}
 		}
-		srv := newAPIHost(bus, registry, eval, sessInfo, profiles...)
+		srv := newAPIHost(bus, registry, eval, sessInfo, *tuiFlag, profiles...)
 		if tb != nil {
 			for _, d := range tb.Devices {
 				srv.RegisterEvaluator(d.ID, d.Eval)
@@ -323,9 +323,18 @@ func runRun(args []string) error {
 			}
 		}
 		focusID := "sandbox-0"
+		var deviceIDs []string
+		evals := map[string]condition.Eval{}
 		if tb != nil && len(tb.Devices) > 0 {
 			// Match FocusDeviceID to the evaluator we enrich from (primary).
 			focusID = tb.Devices[0].ID
+			for _, d := range tb.Devices {
+				deviceIDs = append(deviceIDs, d.ID)
+				evals[d.ID] = d.Eval
+			}
+		} else {
+			deviceIDs = []string{"sandbox-0"}
+			evals["sandbox-0"] = eval
 		}
 		return ntntui.Run(ctx, ntntui.Config{
 			Bus:           bus,
@@ -333,6 +342,8 @@ func runRun(args []string) error {
 			Profile:       tuiProfile,
 			Addr:          *addr,
 			FocusDeviceID: focusID,
+			DeviceIDs:     deviceIDs,
+			Evals:         evals,
 			CmdFn: func() *exec.Cmd {
 				return ns.Command(cmdArgs[0], cmdArgs[1:]...)
 			},

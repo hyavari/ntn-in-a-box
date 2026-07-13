@@ -19,7 +19,8 @@ import (
 // newAPIHost builds the API server (messaging wired) but does not listen yet.
 // Callers must set OnDeviceRegistered (if needed) before listenAPIHost so
 // early POST /devices cannot race past an unset hook.
-func newAPIHost(bus *eventbus.Bus, registry *device.Registry, eval condition.Eval, sessInfo *apihost.SessionInfo, profiles ...*profile.Profile) *apihost.Server {
+// quietMessaging suppresses stderr message breadcrumbs (for --tui).
+func newAPIHost(bus *eventbus.Bus, registry *device.Registry, eval condition.Eval, sessInfo *apihost.SessionInfo, quietMessaging bool, profiles ...*profile.Profile) *apihost.Server {
 	srv := apihost.New(apihost.Config{
 		Profiles:    profiles,
 		Registry:    registry,
@@ -48,7 +49,8 @@ func newAPIHost(bus *eventbus.Bus, registry *device.Registry, eval condition.Eva
 				_, cov := ev.Evaluate(time.Now())
 				return cov.InCoverage
 			},
-			Bus: bus,
+			Bus:   bus,
+			Quiet: quietMessaging,
 		})
 		msgMod.DeliverVia(imsadapter.NewMockAdapter(imsadapter.MockConfig{}))
 		msgMod.RegisterRoutes(srv)
@@ -75,7 +77,7 @@ func listenAPIHost(srv *apihost.Server, addr string, eval condition.Eval) {
 
 // startAPIHost is a convenience for callers that need no OnDeviceRegistered hook.
 func startAPIHost(addr string, bus *eventbus.Bus, registry *device.Registry, eval condition.Eval, sessInfo *apihost.SessionInfo, profiles ...*profile.Profile) *apihost.Server {
-	srv := newAPIHost(bus, registry, eval, sessInfo, profiles...)
+	srv := newAPIHost(bus, registry, eval, sessInfo, false, profiles...)
 	listenAPIHost(srv, addr, eval)
 	return srv
 }

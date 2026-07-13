@@ -559,6 +559,7 @@ make vet     # go vet ./...
 make lint    # golangci-lint run ./...  (see .golangci.yml)
 make check   # fmt + vet + lint + test + build — run before committing
 make docker  # build Docker image (ntnbox:latest)
+make assert-demo  # optional: ntnbox assert (serve + UE→cloud delivered smoke)
 ```
 
 `golangci-lint` and `goimports` aren't part of the standard Go toolchain;

@@ -40,9 +40,9 @@ func (m Model) renderLeftPanel(width int) string {
 	sections = append(sections, "") // blank separator
 	sections = append(sections, m.renderLinkMetrics(width))
 	sections = append(sections, "") // blank separator
-	sections = append(sections, m.renderMessages(width))
-	sections = append(sections, "") // blank separator
 	sections = append(sections, m.renderProfileInfo())
+	sections = append(sections, "") // blank separator
+	sections = append(sections, m.renderMessages(width))
 	sections = append(sections, "") // blank separator
 	sections = append(sections, m.renderHelpLine())
 
@@ -61,7 +61,13 @@ func (m Model) renderCoverageStatus(width int) string {
 		return " " + styleDim.Render("▶ REPLAYING")
 	}
 	if m.inCoverage {
+		if m.focusDeviceID != "" {
+			return " " + styleStatusGreen.Render("▲ "+m.focusDeviceID+" IN COVERAGE")
+		}
 		return " " + styleStatusGreen.Render("▲ IN COVERAGE")
+	}
+	if m.focusDeviceID != "" {
+		return " " + styleStatusRed.Render("▼ "+m.focusDeviceID+" OUT OF COVERAGE")
 	}
 	return " " + styleStatusRed.Render("▼ OUT OF COVERAGE")
 }
@@ -150,26 +156,22 @@ func formatDuration(d time.Duration) string {
 }
 
 // renderLinkMetrics renders the four metric rows with values and
-// sparklines.
+// sparklines. Out of coverage shows placeholders (not stale last-pass values).
 func (m Model) renderLinkMetrics(width int) string {
-	if !m.hasLink && !m.inCoverage {
-		return styleDim.Render(" no link")
+	if !m.inCoverage || !m.hasLink {
+		return strings.Join([]string{
+			styleDim.Render(" delay   —"),
+			styleDim.Render(" jitter  —"),
+			styleDim.Render(" loss    —"),
+			styleDim.Render(" bw      —"),
+		}, "\n")
 	}
 
 	var lines []string
-
-	if m.hasLink {
-		lines = append(lines, m.renderMetricRow("delay ", m.linkState.DelayMs, "ms", m.delayHistory, width))
-		lines = append(lines, m.renderMetricRow("jitter", m.linkState.JitterMs, "ms", m.jitterHistory, width))
-		lines = append(lines, m.renderMetricRow("loss  ", m.linkState.LossPct, "% ", m.lossHistory, width))
-		lines = append(lines, m.renderMetricRow("bw    ", m.linkState.BandwidthKbps, "kb", m.bandwidthHistory, width))
-	} else {
-		lines = append(lines, styleDim.Render(" delay   —"))
-		lines = append(lines, styleDim.Render(" jitter  —"))
-		lines = append(lines, styleDim.Render(" loss    —"))
-		lines = append(lines, styleDim.Render(" bw      —"))
-	}
-
+	lines = append(lines, m.renderMetricRow("delay ", m.linkState.DelayMs, "ms", m.delayHistory, width))
+	lines = append(lines, m.renderMetricRow("jitter", m.linkState.JitterMs, "ms", m.jitterHistory, width))
+	lines = append(lines, m.renderMetricRow("loss  ", m.linkState.LossPct, "% ", m.lossHistory, width))
+	lines = append(lines, m.renderMetricRow("bw    ", m.linkState.BandwidthKbps, "kb", m.bandwidthHistory, width))
 	return strings.Join(lines, "\n")
 }
 
@@ -213,7 +215,7 @@ func (m Model) renderMessages(width int) string {
 	var lines []string
 	lines = append(lines, styleDim.Render(" Messages"))
 	if len(m.messages) == 0 {
-		lines = append(lines, styleDim.Render(" (no messages)"))
+		lines = append(lines, styleDim.Render(" (none yet)"))
 		return strings.Join(lines, "\n")
 	}
 
@@ -227,17 +229,21 @@ func (m Model) renderMessages(width int) string {
 	}
 	for _, row := range m.messages[start:end] {
 		id := row.ID
-		if len(id) > 12 {
-			id = id[:12]
+		if len(id) > 10 {
+			id = id[:10]
 		}
-		line := fmt.Sprintf(" %s  %s→%s  %s", id, row.From, row.To, row.Status)
+		line := fmt.Sprintf(" %s %s→%s %s", id, row.From, row.To, row.Status)
 		if lipgloss.Width(line) > width {
 			line = truncateToWidth(line, width)
 		}
 		lines = append(lines, styleWhite.Render(line))
 	}
 	if len(m.messages) > messageVisibleRows {
-		lines = append(lines, styleDim.Render(fmt.Sprintf(" [%d/%d] J/K scroll", end, len(m.messages))))
+		follow := ""
+		if m.messageFollow {
+			follow = " ·follow"
+		}
+		lines = append(lines, styleDim.Render(fmt.Sprintf(" [%d/%d]%s", end, len(m.messages), follow)))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -264,12 +270,17 @@ func (m Model) renderProfileInfo() string {
 func (m Model) renderHelpLine() string {
 	var help string
 	if m.isReplay && m.replayDone {
-		help = styleProgressGreen.Render(" [r]eplay again") + styleDim.Render(" · [q]uit")
+		help = styleProgressGreen.Render(" [r]eplay") + styleDim.Render(" [q]uit")
 	} else {
-		help = styleDim.Render(" [q]uit [f]ollow [Tab]expand [↑↓]scroll [J/K]msgs")
+		// Keep short — left panel is ~40% width and truncates.
+		keys := " [q] [f]ollow [Tab] [J/K]msg"
+		if len(m.deviceIDs) > 1 {
+			keys += " [d]ev"
+		}
+		help = styleDim.Render(keys)
 	}
 	if m.addr != "" {
-		help += "\n" + styleDim.Render(" GUI: http://localhost:"+addrPort(m.addr)+"/ui")
+		help += "\n" + styleDim.Render(" GUI :"+addrPort(m.addr)+"/ui")
 	}
 	return help
 }

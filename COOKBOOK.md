@@ -21,7 +21,8 @@ curl -s http://127.0.0.1:8080/devices/sandbox-0/lookahead
 Device id: **`sandbox-0`**. Do not use `serve --no-device` unless you `POST /devices` yourself.
 
 Multi-device (phase offset — synthetic staggered windows):
-`./ntnbox serve --profile … --devices 2 --phase-sec 240`
+`./ntnbox serve --profile … --devices 2 --phase-sec 240`  
+(`run` does **not** take `--devices` / `--phase-sec`.)
 
 Multi-device (TLE dual-observer — real geography, e.g. SF + NYC):
 ```bash
@@ -30,8 +31,9 @@ Multi-device (TLE dual-observer — real geography, e.g. SF + NYC):
   --observer sandbox-1=40.7128,-74.0060
 ```
 Do **not** combine `--observer` with `--devices` / `--phase-sec`.
-GUI globe shows one pin (and beam) per observer. Same flags work on
-`ntnbox run --tle … --addr …`.
+GUI globe shows one pin (and beam) per observer. Same `--observer` flags work on
+`ntnbox run --tle … --addr …` (Docker: publish `-p 8080:8080` and use
+`--addr 0.0.0.0:8080` so the host can open `/ui`).
 
 Record/replay preserves `device_id` on coverage/link JSONL so multi-device
 messaging flush stays correct on replay.
@@ -82,8 +84,9 @@ One-shot demo script:
 ./scripts/demo-messaging.sh --gui           # /ui: Network | UE + Activity log
 ```
 
-GUI: choose **Network (cloud)** or **UE (sandbox-1)**. Activity log mirrors
-`ntnbox: message …` lines on stderr. `--gui` starts with two devices.
+GUI: choose **Network (cloud)** or **UE (peer)**. Peer option stays disabled
+until a second device is registered. Activity log uses SSE (with `--tui`,
+stderr message breadcrumbs are quiet so they don’t corrupt the terminal).
 
 Or manually:
 
@@ -103,17 +106,18 @@ No auth: keep the API on loopback (`serve` default `127.0.0.1:8080`).
 Use `--addr 0.0.0.0:8080` only on trusted networks.
 
 Submit anytime; `cloud` is always “in coverage” so delivery is immediate through
-the mock IMS. UE→UE uses the same API with `to: "sandbox-1"` (needs
-`--devices 2 --phase-sec …`); the kernel holds the message until the recipient
-gets `window_opened`.
+the mock IMS. UE→UE uses the same API with `to: "sandbox-1"` — register a peer
+via `serve --devices 2 --phase-sec …` or two `--observer`s (not a single-device
+`run --profile`). The kernel holds the message until the **recipient** gets
+`window_opened`.
 
 Companion: `sendMessage`, `fetchInbox`, `onMessage` / `messageFlow`.
 
 ### 7. Assert smoke (CI / local)
 
 ```bash
-./scripts/assert-demo.sh
-# or: make assert-demo
+./ntnbox assert
+# or: ./scripts/assert-demo.sh   /   make assert-demo
 ```
 
 Starts `serve`, POSTs UE→cloud, polls until `delivered`, exits non-zero on

@@ -68,9 +68,15 @@ type Model struct {
 	replayAgain   bool  // set when user chooses to replay again
 
 	// Store-and-forward message list (newest at end; upsert by id).
-	messages      []messageRow
-	messageScroll int
-	messageCap    int
+	messages       []messageRow
+	messageScroll  int
+	messageCap     int
+	messageFollow  bool // auto-scroll to newest on append
+
+	// Multi-device focus (coverage/link filter); empty = show all / primary.
+	focusDeviceID string
+	deviceIDs     []string
+	onFocusChange func(id string) // set by Run; swaps adapter focus/eval
 
 	// API address (for displaying GUI URL).
 	addr string
@@ -89,11 +95,12 @@ const (
 // buffer capacity.
 func NewModel(p profile.Profile, bufferCapacity int) Model {
 	return Model{
-		profile:    p,
-		output:     NewRingBuffer(bufferCapacity),
-		followMode: true,
-		inCoverage: true, // optimistic until first event
-		messageCap: messageListCap,
+		profile:       p,
+		output:        NewRingBuffer(bufferCapacity),
+		followMode:    true,
+		messageFollow: true,
+		inCoverage:    true, // optimistic until first event
+		messageCap:    messageListCap,
 	}
 }
 
@@ -281,14 +288,53 @@ func (m *Model) upsertMessage(row messageRow) {
 	if len(m.messages) > cap {
 		m.messages = m.messages[len(m.messages)-cap:]
 	}
-	// Keep scroll within bounds after append.
 	maxScroll := len(m.messages) - messageVisibleRows
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
-	if m.messageScroll > maxScroll {
+	if m.messageFollow {
+		m.messageScroll = maxScroll
+	} else if m.messageScroll > maxScroll {
 		m.messageScroll = maxScroll
 	}
+}
+
+func (m *Model) clearMetricsForFocusChange() {
+	m.hasLink = false
+	m.delayHistory = nil
+	m.jitterHistory = nil
+	m.lossHistory = nil
+	m.bandwidthHistory = nil
+	m.inLookahead = false
+	// Coverage fields are refreshed via FocusRefresh from Run's onFocusChange
+	// (Evaluate on the newly focused device). Until that arrives, avoid
+	// labeling the new device with the previous device's coverage.
+	m.inCoverage = false
+	m.remainingSec = 0
+	m.elapsedSec = 0
+	m.coveragePercent = 0
+}
+
+// cycleFocus advances to the next device id. Returns the new focus id
+// and whether it changed.
+func (m *Model) cycleFocus() (string, bool) {
+	if len(m.deviceIDs) < 2 {
+		return m.focusDeviceID, false
+	}
+	idx := 0
+	for i, id := range m.deviceIDs {
+		if id == m.focusDeviceID {
+			idx = (i + 1) % len(m.deviceIDs)
+			break
+		}
+	}
+	next := m.deviceIDs[idx]
+	if next == m.focusDeviceID {
+		return m.focusDeviceID, false
+	}
+	m.focusDeviceID = next
+	m.clearMetricsForFocusChange()
+	return next, true
 }
 
 func pushSample(history []float64, val float64, max int) []float64 {

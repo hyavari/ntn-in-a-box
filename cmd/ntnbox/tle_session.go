@@ -177,16 +177,29 @@ func bootstrapTLE(opts tleBootstrapOpts) (*tleBootstrap, error) {
 				LossPct:       loss,
 				BandwidthKbps: bw,
 			}
-		} else {
-			// Peers follow primary sim time (no independent Advance/speed).
-			out.Devices[len(out.Devices)-1].Eval = tle.NewSyncedEval(out.Primary, seqEval)
 		}
 	}
+	wrapPeerEvals(out.Devices, out.Primary)
 
 	if speed > 1 {
 		fmt.Fprintf(os.Stderr, "ntnbox: gap acceleration: %.0fx\n", speed)
 	}
 	return out, nil
+}
+
+// wrapPeerEvals replaces peer SequenceEvaluators with SyncedEval so only
+// the primary advances the shared simulation clock.
+func wrapPeerEvals(devices []tleDeviceEval, primary *tle.SequenceEvaluator) {
+	if primary == nil {
+		return
+	}
+	for i := 1; i < len(devices); i++ {
+		peer, ok := devices[i].Eval.(*tle.SequenceEvaluator)
+		if !ok {
+			continue
+		}
+		devices[i].Eval = tle.NewSyncedEval(primary, peer)
+	}
 }
 
 func (b *tleBootstrap) sessionInfo() *apihost.SessionInfo {

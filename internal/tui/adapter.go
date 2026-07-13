@@ -34,6 +34,16 @@ func (a *Adapter) SetFocusDevice(id string) {
 	a.focusDeviceID = id
 }
 
+// SetEvaluator swaps the enrichment evaluator (per focused device).
+func (a *Adapter) SetEvaluator(eval condition.Eval) {
+	a.eval = eval
+}
+
+// FocusDeviceID returns the current focus filter (may be empty).
+func (a *Adapter) FocusDeviceID() string {
+	return a.focusDeviceID
+}
+
 func (a *Adapter) acceptDevice(deviceID string) bool {
 	if a.focusDeviceID == "" || deviceID == "" {
 		return true

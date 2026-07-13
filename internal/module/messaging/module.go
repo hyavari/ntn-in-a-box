@@ -28,6 +28,9 @@ type Config struct {
 	DeviceExists DeviceExists
 	InCoverage   InCoverage
 	Bus          *eventbus.Bus // optional; for SSE message events
+	// Quiet suppresses stderr lifecycle breadcrumbs (use when a TUI owns
+	// the terminal — status still goes to the bus/SSE).
+	Quiet bool
 }
 
 // Module implements store-and-forward messaging.
@@ -36,6 +39,7 @@ type Module struct {
 	deviceExists DeviceExists
 	inCoverage   InCoverage
 	bus          *eventbus.Bus
+	quiet        bool
 
 	mu      sync.Mutex
 	adapter module.IMSAdapter
@@ -56,6 +60,7 @@ func New(cfg Config) *Module {
 		deviceExists: cfg.DeviceExists,
 		inCoverage:   cfg.InCoverage,
 		bus:          cfg.Bus,
+		quiet:        cfg.Quiet,
 		ctx:          ctx,
 		cancel:       cancel,
 	}
@@ -153,8 +158,11 @@ func (m *Module) publishStatus(id string) {
 		return
 	}
 	// Lifecycle breadcrumb for operators (no body — keep CLI free of SOS text).
-	fmt.Fprintf(os.Stderr, "ntnbox: message %s  %s → %s  %s\n",
-		msg.ID, msg.From, msg.To, msg.Status)
+	// Skip when Quiet: TUI/alt-screen owns the terminal; bus still notifies.
+	if !m.quiet {
+		fmt.Fprintf(os.Stderr, "ntnbox: message %s  %s → %s  %s\n",
+			msg.ID, msg.From, msg.To, msg.Status)
+	}
 
 	if m.bus == nil {
 		return

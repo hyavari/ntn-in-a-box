@@ -201,3 +201,99 @@ func TestModel_UpsertMessage(t *testing.T) {
 		t.Error("body must not appear in render")
 	}
 }
+
+func TestModel_MessageFollow(t *testing.T) {
+	m := NewModel(profile.Profile{Name: "t"}, 10)
+	// Fill past visible window.
+	for i := 0; i < messageVisibleRows+3; i++ {
+		updated, _ := m.Update(MessageLifecycleMsg{
+			ID: "msg-" + itoa(i), From: "a", To: "b", Status: "queued",
+		})
+		m = updated.(Model)
+	}
+	if !m.messageFollow {
+		t.Fatal("expected messageFollow after appends")
+	}
+	maxScroll := len(m.messages) - messageVisibleRows
+	if m.messageScroll != maxScroll {
+		t.Fatalf("scroll=%d want %d (follow bottom)", m.messageScroll, maxScroll)
+	}
+	out := m.renderMessages(80)
+	if !strings.Contains(out, "msg-"+itoa(messageVisibleRows+2)) {
+		t.Errorf("newest not visible: %q", out)
+	}
+
+	// Scroll up pauses follow.
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}})
+	m = updated.(Model)
+	if m.messageFollow {
+		t.Fatal("K should disable messageFollow")
+	}
+	pausedScroll := m.messageScroll
+
+	updated, _ = m.Update(MessageLifecycleMsg{
+		ID: "msg-new", From: "a", To: "b", Status: "queued",
+	})
+	m = updated.(Model)
+	if m.messageScroll != pausedScroll {
+		t.Fatalf("paused follow should not jump on append: scroll=%d was %d", m.messageScroll, pausedScroll)
+	}
+}
+
+func TestModel_CycleFocus(t *testing.T) {
+	m := NewModel(profile.Profile{Name: "t"}, 10)
+	m.deviceIDs = []string{"sf", "nyc"}
+	m.focusDeviceID = "sf"
+	var got string
+	m.onFocusChange = func(id string) { got = id }
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	m = updated.(Model)
+	if m.focusDeviceID != "nyc" || got != "nyc" {
+		t.Fatalf("focus=%q callback=%q want nyc", m.focusDeviceID, got)
+	}
+	if m.hasLink {
+		t.Error("sparklines/link should clear on focus change")
+	}
+	if m.inCoverage || m.remainingSec != 0 {
+		t.Error("coverage should clear until focus refresh arrives")
+	}
+}
+
+func TestAdapter_SetEvaluator(t *testing.T) {
+	sender := &mockSender{}
+	primary := &stubEval{inCov: true, until: 10}
+	peer := &stubEval{inCov: false, until: 99}
+	adapter := NewAdapter(sender, primary)
+	adapter.SetFocusDevice("sf")
+
+	adapter.OnCoverage(eventbus.CoverageEvent{
+		Kind: eventbus.KindWindowOpened, DeviceID: "sf", At: time.Now(),
+	})
+	msg := sender.get(0).(CoverageMsg)
+	if !msg.InCoverage || msg.UntilNextTransition != 10 {
+		t.Fatalf("primary enrich: %+v", msg)
+	}
+
+	adapter.SetFocusDevice("nyc")
+	adapter.SetEvaluator(peer)
+	adapter.OnCoverage(eventbus.CoverageEvent{
+		Kind: eventbus.KindWindowClosed, DeviceID: "nyc", At: time.Now(),
+	})
+	msg2 := sender.get(1).(CoverageMsg)
+	if msg2.InCoverage || msg2.UntilNextTransition != 99 {
+		t.Fatalf("peer enrich: %+v", msg2)
+	}
+}
+
+type stubEval struct {
+	inCov bool
+	until float64
+}
+
+func (s *stubEval) Evaluate(time.Time) (condition.LinkState, condition.CoverageState) {
+	return condition.LinkState{}, condition.CoverageState{
+		InCoverage:             s.inCov,
+		UntilNextTransitionSec: s.until,
+	}
+}

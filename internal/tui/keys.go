@@ -70,10 +70,21 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.messageScroll < maxScroll {
 			m.messageScroll++
 		}
+		if m.messageScroll >= maxScroll {
+			m.messageFollow = true
+		}
 
 	case "K":
 		if m.messageScroll > 0 {
 			m.messageScroll--
+			m.messageFollow = false
+		}
+
+	case "d":
+		if next, ok := m.cycleFocus(); ok {
+			if m.onFocusChange != nil {
+				m.onFocusChange(next)
+			}
 		}
 	}
 

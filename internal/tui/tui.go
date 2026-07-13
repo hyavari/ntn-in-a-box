@@ -30,6 +30,13 @@ type Config struct {
 	// device (e.g. "sandbox-0") so peer TLE observers do not thrash the panel.
 	FocusDeviceID string
 
+	// DeviceIDs is the cycle order for `d` focus switching. Length < 2 disables.
+	DeviceIDs []string
+
+	// Evals maps device id → evaluator for enrichment when focus changes.
+	// Missing entries leave enrichment unset for that device.
+	Evals map[string]condition.Eval
+
 	// NotifySender is called (if non-nil) with the program's Sender
 	// interface before Run blocks. This lets callers start background
 	// goroutines (e.g. the replayer) that send messages into the TUI.
@@ -48,18 +55,48 @@ func Run(ctx context.Context, cfg Config) error {
 	model := NewModel(*cfg.Profile, defaultBufferCapacity)
 	model.addr = cfg.Addr
 	model.isReplay = cfg.IsReplay
+	model.focusDeviceID = cfg.FocusDeviceID
+	model.deviceIDs = append([]string(nil), cfg.DeviceIDs...)
+
+	// Holder lets the adapter bind before tea.Program exists, then
+	// forwards to the real program once constructed.
+	holder := &senderHolder{}
+	adapter := NewAdapter(holder, cfg.Evaluator)
+	adapter.SetFocusDevice(cfg.FocusDeviceID)
+	evals := cfg.Evals
+	model.onFocusChange = func(id string) {
+		adapter.SetFocusDevice(id)
+		var eval condition.Eval
+		if evals != nil {
+			if e, ok := evals[id]; ok {
+				adapter.SetEvaluator(e)
+				eval = e
+			} else {
+				adapter.SetEvaluator(nil)
+			}
+		}
+		// Refresh coverage from the newly focused evaluator so the status
+		// line does not keep the previous device's in/out state.
+		if eval != nil {
+			now := time.Now()
+			_, cov := eval.Evaluate(now)
+			holder.Send(CoverageMsg{
+				Kind:                "", // not a transition — no output separators
+				InCoverage:          cov.InCoverage,
+				ElapsedSec:          cov.ElapsedSec,
+				UntilNextTransition: cov.UntilNextTransitionSec,
+				At:                  now,
+			})
+		}
+	}
 
 	program := tea.NewProgram(
 		model,
 		tea.WithAltScreen(),
 		tea.WithContext(ctx),
 	)
+	holder.s = program
 
-	// Set up the adapter and subscribe to the bus.
-	// Save unsubscribe funcs so we can clean up on exit (prevents
-	// subscriber leaks when the loop in replay.go calls Run again).
-	adapter := NewAdapter(program, cfg.Evaluator)
-	adapter.SetFocusDevice(cfg.FocusDeviceID)
 	unsubCoverage := cfg.Bus.SubscribeCoverage(adapter.OnCoverage)
 	unsubLinkState := cfg.Bus.SubscribeLinkState(adapter.OnLinkState)
 	unsubMessage := cfg.Bus.SubscribeMessage(adapter.OnMessage)
@@ -103,6 +140,17 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	return nil
+}
+
+// senderHolder implements Sender and forwards once the program is set.
+type senderHolder struct {
+	s Sender
+}
+
+func (h *senderHolder) Send(msg tea.Msg) {
+	if h.s != nil {
+		h.s.Send(msg)
+	}
 }
 
 // cmdRunnerCmd is like CmdRunner but takes a pre-built *exec.Cmd
