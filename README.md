@@ -319,10 +319,13 @@ ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- python3 samples/pyth
 ./scripts/demo-android.sh sos_burst
 ```
 
-The Docker image includes only Go binaries (ntnbox + poller) and curl.
-Node.js and Python samples require their runtimes on the host (Linux
-native). Shell and Go samples work on macOS via the Docker proxy
-(cross-compiled and bind-mounted automatically).
+The Docker image includes ntnbox, poller, curl, and **Node.js 22 + pnpm** so
+macOS developers can run JS/TS apps under `ntnbox run` (host Darwin Node
+binaries cannot execute inside the Linux container). The Darwin proxy
+bind-mounts referenced project paths and overlays a Linux `node_modules`
+volume for JS projects. Python samples still need a Linux host runtime
+today. Shell and Go samples work on macOS via the Docker proxy
+(cross-compiled / bind-mounted automatically).
 
 No code changes needed in your app — ntnbox shapes the network
 transparently at the OS level. See [TUTORIAL.md](TUTORIAL.md) for a
@@ -460,7 +463,7 @@ profile.yaml → profile.LoadFile() → Profile (static)
             ┌────────────┼────────────┐
             ▼            ▼            ▼
       Dev Sandbox    Messaging    Service API
-      (netem/tc)     (future)      (future)
+      (netem/tc)     (shipped)     (future)
 ```
 
 #### TLE path (alternative to profile.yaml)

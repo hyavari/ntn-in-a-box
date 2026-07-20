@@ -94,22 +94,19 @@ func runViaDarwinDocker(args []string) error {
 		dockerArgs = append(dockerArgs, "-it")
 	}
 
-	// If the command is a local file (starts with ./ or /), bind-mount it.
-	// Otherwise let it resolve from the container's PATH.
+	// Bind-mount host paths referenced by the command (binaries, project dirs).
+	// JS projects get a Linux node_modules volume overlay (Darwin modules won't run).
 	cmdArgs := parsed.cmdArgs
-	if len(cmdArgs) > 0 {
-		cmdBin := cmdArgs[0]
-		if len(cmdBin) > 0 && (cmdBin[0] == '/' || (len(cmdBin) > 1 && cmdBin[:2] == "./")) {
-			if absBin, err := filepath.Abs(cmdBin); err == nil {
-				if info, err := os.Stat(absBin); err == nil && !info.IsDir() {
-					dockerArgs = append(dockerArgs,
-						"-v", absBin+":/app/"+filepath.Base(absBin)+":ro",
-					)
-					cmdArgs[0] = "/app/" + filepath.Base(absBin)
-				}
-			}
-		}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolving working directory: %w", err)
 	}
+	mounts, rewrittenCmd, err := prepareDarwinCmdMounts(cwd, cmdArgs)
+	if err != nil {
+		return fmt.Errorf("preparing host mounts: %w", err)
+	}
+	cmdArgs = rewrittenCmd
+	dockerArgs = appendDarwinMountArgs(dockerArgs, mounts)
 
 	// Build the ntnbox run command for inside the container.
 	if parsed.tui {

@@ -17,6 +17,7 @@ docs/
 *.out
 /bin/
 /dist/
+node_modules/
 
 # Go workspace/build
 vendor/

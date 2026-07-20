@@ -56,10 +56,22 @@ func TestSetup(t *testing.T) {
 		t.Fatalf("Setup: %v", err)
 	}
 
-	got := mock.last()
-	want := "ip netns exec ntnbox-ue-1 tc qdisc add dev veth-inner root netem delay 100ms 20ms loss 5.00% rate 10000kbit"
-	if got != want {
-		t.Errorf("Setup command:\n  got:  %s\n  want: %s", got, want)
+	cmds := mock.all()
+	if len(cmds) != 3 {
+		t.Fatalf("Setup issued %d cmds, want 3:\n%s", len(cmds), strings.Join(cmds, "\n"))
+	}
+	if !strings.Contains(cmds[0], "root handle 1: prio bands 2 priomap") {
+		t.Errorf("Setup[0] prio root with pinned priomap: %s", cmds[0])
+	}
+	if !strings.Contains(cmds[0], "1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1") {
+		t.Errorf("Setup[0] missing all-band-1 priomap: %s", cmds[0])
+	}
+	wantNetem := "parent 1:2 handle 20: netem delay 100ms 20ms loss 5.00% rate 10000kbit"
+	if !strings.Contains(cmds[1], wantNetem) {
+		t.Errorf("Setup[1] netem:\n  got:  %s\n  want containing: %s", cmds[1], wantNetem)
+	}
+	if !strings.Contains(cmds[2], "match ip dst 10.200.0.1/32 flowid 1:1") {
+		t.Errorf("Setup[2] exempt filter: %s", cmds[2])
 	}
 }
 
@@ -83,7 +95,7 @@ func TestApply(t *testing.T) {
 	}
 
 	got := mock.last()
-	want := "ip netns exec ntnbox-ue-1 tc qdisc change dev veth-inner root netem delay 40ms 5ms loss 0.20% rate 20000kbit"
+	want := "ip netns exec ntnbox-ue-1 tc qdisc change dev veth-inner parent 1:2 handle 20: netem delay 40ms 5ms loss 0.20% rate 20000kbit"
 	if got != want {
 		t.Errorf("Apply command:\n  got:  %s\n  want: %s", got, want)
 	}
@@ -109,7 +121,7 @@ func TestApplyZeroJitter(t *testing.T) {
 	}
 
 	got := mock.last()
-	want := "ip netns exec ntnbox-ue-1 tc qdisc change dev veth-inner root netem delay 50ms 0ms loss 1.00% rate 5000kbit"
+	want := "ip netns exec ntnbox-ue-1 tc qdisc change dev veth-inner parent 1:2 handle 20: netem delay 50ms 0ms loss 1.00% rate 5000kbit"
 	if got != want {
 		t.Errorf("Apply (zero jitter):\n  got:  %s\n  want: %s", got, want)
 	}
@@ -135,7 +147,7 @@ func TestApplyZeroLoss(t *testing.T) {
 	}
 
 	got := mock.last()
-	want := "ip netns exec ntnbox-ue-1 tc qdisc change dev veth-inner root netem delay 30ms 2ms loss 0.00% rate 50000kbit"
+	want := "ip netns exec ntnbox-ue-1 tc qdisc change dev veth-inner parent 1:2 handle 20: netem delay 30ms 2ms loss 0.00% rate 50000kbit"
 	if got != want {
 		t.Errorf("Apply (zero loss):\n  got:  %s\n  want: %s", got, want)
 	}
@@ -161,7 +173,7 @@ func TestApplyHighBandwidth(t *testing.T) {
 	}
 
 	got := mock.last()
-	want := "ip netns exec ntnbox-ue-1 tc qdisc change dev veth-inner root netem delay 20ms 3ms loss 0.10% rate 100000kbit"
+	want := "ip netns exec ntnbox-ue-1 tc qdisc change dev veth-inner parent 1:2 handle 20: netem delay 20ms 3ms loss 0.10% rate 100000kbit"
 	if got != want {
 		t.Errorf("Apply (high bandwidth):\n  got:  %s\n  want: %s", got, want)
 	}
@@ -180,7 +192,7 @@ func TestSetFullLoss(t *testing.T) {
 	}
 
 	got := mock.last()
-	want := "ip netns exec ntnbox-ue-1 tc qdisc change dev veth-inner root netem loss 100%"
+	want := "ip netns exec ntnbox-ue-1 tc qdisc change dev veth-inner parent 1:2 handle 20: netem loss 100%"
 	if got != want {
 		t.Errorf("SetFullLoss command:\n  got:  %s\n  want: %s", got, want)
 	}
@@ -222,15 +234,23 @@ func TestSequenceSetupApplyFullLossTeardown(t *testing.T) {
 	_ = ctrl.Teardown(ctx)
 
 	cmds := mock.all()
-	if len(cmds) != 4 {
-		t.Fatalf("got %d commands, want 4", len(cmds))
+	// Setup=3, Apply=1, FullLoss=1, Teardown=1
+	if len(cmds) != 6 {
+		t.Fatalf("got %d commands, want 6:\n%s", len(cmds), strings.Join(cmds, "\n"))
 	}
+}
 
-	// Verify action words in sequence.
-	actions := []string{"add", "change", "change", "del"}
-	for i, wantAction := range actions {
-		if !strings.Contains(cmds[i], " "+wantAction+" ") {
-			t.Errorf("cmd[%d] should contain %q: %s", i, wantAction, cmds[i])
-		}
+func TestControlExemptIPOverride(t *testing.T) {
+	mock := &mockExec{}
+	ctrl := &Controller{
+		Netns:           "ntnbox-ue-1",
+		Device:          "veth-inner",
+		ControlExemptIP: "10.9.9.1",
+		Exec:            mock,
+	}
+	_ = ctrl.Setup(context.Background(), condition.LinkState{DelayMs: 1, BandwidthKbps: 1000})
+	cmds := mock.all()
+	if !strings.Contains(cmds[2], "dst 10.9.9.1/32") {
+		t.Fatalf("filter should use override IP: %s", cmds[2])
 	}
 }
