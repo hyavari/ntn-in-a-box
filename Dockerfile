@@ -14,7 +14,7 @@ COPY . .
 RUN CGO_ENABLED=0 go build -o /out/ntnbox ./cmd/ntnbox/
 RUN CGO_ENABLED=0 go build -o /out/poller ./cmd/poller/
 
-FROM node:22-alpine AS node
+FROM node:24-alpine AS node
 
 # Runtime image.
 FROM alpine:3.20
