@@ -30,6 +30,7 @@ Uses only Node.js built-in `http`/`https` modules. No `npm install` needed.
 
 ## Docker note
 
-The Docker image does not include Node.js. This sample runs on Linux
-natively or requires Node.js installed on the host. For Docker-based
+The Docker image includes Node.js 24 + pnpm for Darwin proxy JS workloads.
+This sample still runs with plain `node` on Linux natively or under
+`ntnbox run`. For Docker-based
 demos, use the Go samples (`--sample go-messenger` or `--sample curl-demo`).
