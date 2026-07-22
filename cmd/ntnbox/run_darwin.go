@@ -134,7 +134,7 @@ func runViaDarwinDocker(args []string) error {
 			if err != nil {
 				return fmt.Errorf("creating record file: %w", err)
 			}
-			f.Close()
+			_ = f.Close()
 		}
 		dockerArgs = append(dockerArgs, "-v", absRecord+":/tmp/recording.jsonl")
 		containerCmd = append(containerCmd, "--record", "/tmp/recording.jsonl")

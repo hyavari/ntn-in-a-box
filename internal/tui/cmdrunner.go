@@ -41,8 +41,8 @@ func (cr *CmdRunner) Start(ctx context.Context) error {
 	cr.cmd.Stdin = nil // non-interactive
 
 	if err := cr.cmd.Start(); err != nil {
-		pw.Close()
-		pr.Close()
+		_ = pw.Close()
+		_ = pr.Close()
 		return err
 	}
 
@@ -55,7 +55,7 @@ func (cr *CmdRunner) Start(ctx context.Context) error {
 	// CmdExitedMsg.
 	go func() {
 		err := cr.cmd.Wait()
-		pw.Close() // unblocks the scanner
+		_ = pw.Close() // unblocks the scanner
 		code := cr.cmd.ProcessState.ExitCode()
 		cr.sender.Send(CmdExitedMsg{Code: code, Err: err})
 	}()

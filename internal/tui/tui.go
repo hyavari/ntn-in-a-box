@@ -172,8 +172,8 @@ func (cr *cmdRunnerCmd) Start(ctx context.Context) error {
 	cr.cmd.Stdin = nil
 
 	if err := cr.cmd.Start(); err != nil {
-		pw.Close()
-		pr.Close()
+		_ = pw.Close()
+		_ = pr.Close()
 		return err
 	}
 
@@ -183,7 +183,7 @@ func (cr *cmdRunnerCmd) Start(ctx context.Context) error {
 
 	go func() {
 		err := cr.cmd.Wait()
-		pw.Close()
+		_ = pw.Close()
 		code := cr.cmd.ProcessState.ExitCode()
 		cr.sender.Send(CmdExitedMsg{Code: code, Err: err})
 		close(cr.done)

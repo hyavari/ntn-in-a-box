@@ -54,7 +54,7 @@ func main() {
 			time.Now().Format("15:04:05"), msg.ID, msg.From, msg.Text)
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response{
+		_ = json.NewEncoder(w).Encode(response{
 			Status:   "delivered",
 			ServerTs: time.Now().Format(time.RFC3339),
 			MsgID:    int(count),
@@ -63,7 +63,7 @@ func main() {
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
 
 	addr := ":9090"

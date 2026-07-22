@@ -46,7 +46,7 @@ func (r *Replayer) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("replay: open %s: %w", r.path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	var firstAt, lastAt time.Time
@@ -147,7 +147,7 @@ func (r *Replayer) scanDuration() time.Duration {
 	if err != nil {
 		return 0
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	var firstAt, lastAt time.Time

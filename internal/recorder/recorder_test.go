@@ -187,12 +187,24 @@ func TestReplayer_PublishesDeviceID(t *testing.T) {
 func TestReplayer_PublishesInOrder(t *testing.T) {
 	// Write a test recording.
 	path := filepath.Join(t.TempDir(), "replay.jsonl")
-	f, _ := os.Create(path)
-	f.WriteString(`{"type":"coverage","kind":"window_opened","at":"2026-07-08T10:00:00Z","in_coverage":true,"elapsed_sec":0,"until_next_transition":90}` + "\n")
-	f.WriteString(`{"type":"linkstate","delay_ms":150,"jitter_ms":40,"loss_pct":10,"bandwidth_kbps":2000,"at":"2026-07-08T10:00:00.1Z"}` + "\n")
-	f.WriteString(`{"type":"linkstate","delay_ms":42,"jitter_ms":5,"loss_pct":0.2,"bandwidth_kbps":20000,"at":"2026-07-08T10:00:00.2Z"}` + "\n")
-	f.WriteString(`{"type":"coverage","kind":"window_closed","at":"2026-07-08T10:00:00.3Z","in_coverage":false,"elapsed_sec":0,"until_next_transition":510}` + "\n")
-	f.Close()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := []string{
+		`{"type":"coverage","kind":"window_opened","at":"2026-07-08T10:00:00Z","in_coverage":true,"elapsed_sec":0,"until_next_transition":90}` + "\n",
+		`{"type":"linkstate","delay_ms":150,"jitter_ms":40,"loss_pct":10,"bandwidth_kbps":2000,"at":"2026-07-08T10:00:00.1Z"}` + "\n",
+		`{"type":"linkstate","delay_ms":42,"jitter_ms":5,"loss_pct":0.2,"bandwidth_kbps":20000,"at":"2026-07-08T10:00:00.2Z"}` + "\n",
+		`{"type":"coverage","kind":"window_closed","at":"2026-07-08T10:00:00.3Z","in_coverage":false,"elapsed_sec":0,"until_next_transition":510}` + "\n",
+	}
+	for _, line := range lines {
+		if _, err := f.WriteString(line); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	bus := eventbus.New(eventbus.LinkStateThrottle{Interval: 0, DeltaThreshold: 0})
 
@@ -207,8 +219,7 @@ func TestReplayer_PublishesInOrder(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := replayer.Run(ctx)
-	if err != nil {
+	if err := replayer.Run(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -237,11 +248,22 @@ func TestReplayer_PublishesInOrder(t *testing.T) {
 
 func TestReplayer_SkipsBadLines(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bad.jsonl")
-	f, _ := os.Create(path)
-	f.WriteString("this is not json\n")
-	f.WriteString(`{"type":"linkstate","delay_ms":42,"jitter_ms":5,"loss_pct":0.2,"bandwidth_kbps":20000,"at":"2026-07-08T10:00:00Z"}` + "\n")
-	f.WriteString("{bad json again}\n")
-	f.Close()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range []string{
+		"this is not json\n",
+		`{"type":"linkstate","delay_ms":42,"jitter_ms":5,"loss_pct":0.2,"bandwidth_kbps":20000,"at":"2026-07-08T10:00:00Z"}` + "\n",
+		"{bad json again}\n",
+	} {
+		if _, err := f.WriteString(line); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	bus := eventbus.New(eventbus.LinkStateThrottle{Interval: 0, DeltaThreshold: 0})
 	var count int
@@ -260,12 +282,19 @@ func TestReplayer_SkipsBadLines(t *testing.T) {
 func TestReplayer_Cancellation(t *testing.T) {
 	// Long recording that should be interrupted.
 	path := filepath.Join(t.TempDir(), "long.jsonl")
-	f, _ := os.Create(path)
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 	for i := range 100 {
 		ts := time.Date(2026, 7, 8, 10, 0, i, 0, time.UTC).Format(time.RFC3339Nano)
-		f.WriteString(fmt.Sprintf(`{"type":"linkstate","delay_ms":42,"jitter_ms":5,"loss_pct":0.2,"bandwidth_kbps":20000,"at":"%s"}`+"\n", ts))
+		if _, err := f.WriteString(fmt.Sprintf(`{"type":"linkstate","delay_ms":42,"jitter_ms":5,"loss_pct":0.2,"bandwidth_kbps":20000,"at":"%s"}`+"\n", ts)); err != nil {
+			t.Fatal(err)
+		}
 	}
-	f.Close()
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	bus := eventbus.New(eventbus.LinkStateThrottle{Interval: 0, DeltaThreshold: 0})
 	var count int

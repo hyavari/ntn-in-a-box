@@ -662,7 +662,7 @@ func TestUI_RedirectsFromUI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusMovedPermanently {
 		t.Errorf("GET /ui status = %d, want 301", resp.StatusCode)
@@ -683,7 +683,7 @@ func TestCapabilities_ReturnsDeviceCapabilities(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp.Body.Close()
+	resp.Body.Close() //nolint:errcheck
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("register device: status %d", resp.StatusCode)
 	}
@@ -693,7 +693,7 @@ func TestCapabilities_ReturnsDeviceCapabilities(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -754,13 +754,13 @@ func TestCapabilities_SOSProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	resp, err = http.Get(ts.URL + "/devices/sos-1/capabilities")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	var caps struct {
 		Messaging       bool `json:"messaging"`
@@ -786,7 +786,7 @@ func TestCapabilities_NotFound(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
@@ -808,7 +808,7 @@ func TestSSE_ForwardsReplayDone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
