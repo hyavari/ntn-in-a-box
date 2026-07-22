@@ -43,7 +43,7 @@ runs:
           curl -fsSL "$url" -o /tmp/ntnbox
           chmod +x /tmp/ntnbox
           sudo cp /tmp/ntnbox /usr/local/bin/ntnbox
-          ntnbox --help >/dev/null
+          ntnbox >/dev/null
           exit 0
         fi
 
