@@ -82,25 +82,6 @@ func startAPIHost(addr string, bus *eventbus.Bus, registry *device.Registry, eva
 	return srv
 }
 
-// dockerHostPublishSpec returns the Docker -p publish spec for the API port.
-// Loopback-oriented CLI addrs map to 127.0.0.1:port:port so messaging is not
-// exposed on all host interfaces; explicit LAN binds keep port:port.
-func dockerHostPublishSpec(addr string) string {
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		if !strings.Contains(addr, ":") {
-			port = addr
-			host = ""
-		} else {
-			return addrPort(addr) + ":" + addrPort(addr)
-		}
-	}
-	if host == "" || host == "127.0.0.1" || host == "localhost" || host == "::1" {
-		return net.JoinHostPort("127.0.0.1", port) + ":" + port
-	}
-	return port + ":" + port
-}
-
 // normalizeListenAddr maps ":8080" / "8080" to 127.0.0.1 so messaging is not
 // exposed on all interfaces by accident. Explicit 0.0.0.0 / LAN hosts are kept
 // with a stderr warning.

@@ -17,8 +17,13 @@ check-fmt:
 vet:
 	go vet ./...
 
+# On macOS, also lint with GOOS=linux so Darwin-only call sites don't hide
+# unused symbols the way Linux CI would see them.
 lint:
 	golangci-lint run ./...
+ifneq ($(shell go env GOOS),linux)
+	GOOS=linux golangci-lint run ./...
+endif
 
 # Run everything CI would run (non-mutating).
 check: check-fmt vet lint test build
