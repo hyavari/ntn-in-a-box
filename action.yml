@@ -37,15 +37,27 @@ runs:
 
         version="${{ inputs.ntnbox-version }}"
         if [ -n "$version" ]; then
-          asset="ntnbox-linux-amd64"
-          url="https://github.com/hyavari/ntn-in-a-box/releases/download/${version}/${asset}"
-          echo "Downloading $url"
-          curl -fsSL "$url" -o /tmp/ntnbox
-          chmod +x /tmp/ntnbox
-          sudo cp /tmp/ntnbox /usr/local/bin/ntnbox
-          command -v ntnbox
-          test -x "$(command -v ntnbox)"
-          exit 0
+          os="$(uname -s)"
+          arch="$(uname -m)"
+          asset=""
+          case "${os}-${arch}" in
+            Linux-x86_64) asset="ntnbox-linux-amd64" ;;
+            Linux-aarch64|Linux-arm64) asset="ntnbox-linux-arm64" ;;
+            Darwin-arm64) asset="ntnbox-darwin-arm64" ;;
+          esac
+          if [ -n "$asset" ]; then
+            base="https://github.com/hyavari/ntn-in-a-box/releases/download/${version}"
+            echo "Downloading ${base}/${asset}"
+            curl -fsSL "${base}/${asset}" -o "/tmp/${asset}"
+            curl -fsSL "${base}/${asset}.sha256" -o "/tmp/${asset}.sha256"
+            (cd /tmp && sha256sum -c "${asset}.sha256")
+            chmod +x "/tmp/${asset}"
+            sudo cp "/tmp/${asset}" /usr/local/bin/ntnbox
+            command -v ntnbox
+            test -x "$(command -v ntnbox)"
+            exit 0
+          fi
+          echo "::warning::no prebuilt ntnbox for ${os}-${arch}; building from source"
         fi
 
         # Build ntnbox from source.

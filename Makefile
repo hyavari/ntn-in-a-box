@@ -27,6 +27,7 @@ check: check-fmt vet lint test build
 assert-demo:
 	./scripts/assert-demo.sh
 
-# Build the Docker image for Linux-native ntnbox run.
+# Build a local Docker image for Linux-native ntnbox run (ntnbox:latest).
+# Published multi-arch images: ghcr.io/hyavari/ntn-in-a-box:{version,latest}
 docker:
 	docker build -t ntnbox:latest .

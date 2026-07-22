@@ -58,11 +58,15 @@ sudo ./ntnbox run --profile testdata/profiles/d2c_burst.yaml -- ./my-app
 ### macOS (via Docker)
 
 On macOS, `ntnbox run` auto-detects the platform and transparently
-re-invokes itself inside a Docker container:
+re-invokes itself inside a Docker container. Prefer a published image:
 
 ```bash
-make docker
+docker pull ghcr.io/hyavari/ntn-in-a-box:latest
+docker tag ghcr.io/hyavari/ntn-in-a-box:latest ntnbox:latest
+# or build locally: make docker
+```
 
+```bash
 # Run curl under NTN shaping
 ./ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- curl -o /dev/null -w "time_total: %{time_total}s\n" http://example.com
 
@@ -319,13 +323,20 @@ ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- python3 samples/pyth
 ./scripts/demo-android.sh sos_burst
 ```
 
-The Docker image includes ntnbox, poller, curl, and **Node.js 22 + pnpm** so
+Published images (linux/amd64 + linux/arm64) live at
+`ghcr.io/hyavari/ntn-in-a-box` (`:latest` and `:vX.Y.Z` on each release).
+The image includes ntnbox, poller, curl, and **Node.js 24 + pnpm** so
 macOS developers can run JS/TS apps under `ntnbox run` (host Darwin Node
 binaries cannot execute inside the Linux container). The Darwin proxy
 bind-mounts referenced project paths and overlays a Linux `node_modules`
 volume for JS projects. Python samples still need a Linux host runtime
 today. Shell and Go samples work on macOS via the Docker proxy
 (cross-compiled / bind-mounted automatically).
+
+Release binaries (no Docker): `ntnbox-linux-amd64`, `ntnbox-linux-arm64`,
+and `ntnbox-darwin-arm64` on the
+[GitHub Releases](https://github.com/hyavari/ntn-in-a-box/releases) page.
+
 
 No code changes needed in your app — ntnbox shapes the network
 transparently at the OS level. See [TUTORIAL.md](TUTORIAL.md) for a
@@ -349,10 +360,10 @@ Run your CI tests under simulated NTN conditions with a single step:
     command: npm test
 ```
 
-Requires `ubuntu-latest` (or any Linux runner with `sudo`, `ip`, and
-Go installed). The action builds `ntnbox` from source and runs it with
-`sudo` to create network namespaces. Optionally set `ntnbox-version: v0.1.1`
-to download a release binary instead of building from source. Your job's
+Requires `ubuntu-latest` (or any Linux runner with `sudo` and `ip`).
+The action builds `ntnbox` from source (needs Go) unless you set
+`ntnbox-version` to a release tag — then it downloads the matching
+linux/amd64 or linux/arm64 binary (checksum verified). Your job's
 toolchain (Node, Go, Python, etc.) is available to the command since it
 runs directly on the host.
 
@@ -365,7 +376,7 @@ runs directly on the host.
 | `replay` | No* | — | Path to a JSONL recording (overrides `profile`) |
 | `speed` | No | `1` | Replay speed multiplier |
 | `record` | No | — | Path to save a recording of this session |
-| `ntnbox-version` | No | — | GitHub release tag to download (e.g. `v0.1.1`); if unset, build from source |
+| `ntnbox-version` | No | — | GitHub release tag to download (arch-specific asset); if unset, build from source |
 
 *Either `profile` or `replay` is required.
 
@@ -563,7 +574,7 @@ make fmt     # gofmt + goimports, applied in place
 make vet     # go vet ./...
 make lint    # golangci-lint run ./...  (see .golangci.yml)
 make check   # fmt + vet + lint + test + build — run before committing
-make docker  # build Docker image (ntnbox:latest)
+make docker  # build local image (ntnbox:latest); releases also push ghcr.io/hyavari/ntn-in-a-box
 make assert-demo  # optional: ntnbox assert (serve + UE→cloud delivered smoke)
 ```
 
