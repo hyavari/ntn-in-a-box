@@ -43,7 +43,8 @@ runs:
           curl -fsSL "$url" -o /tmp/ntnbox
           chmod +x /tmp/ntnbox
           sudo cp /tmp/ntnbox /usr/local/bin/ntnbox
-          ntnbox >/dev/null
+          command -v ntnbox
+          test -x "$(command -v ntnbox)"
           exit 0
         fi
 
