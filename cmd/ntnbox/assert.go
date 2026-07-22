@@ -42,7 +42,7 @@ func runAssert(args []string) error {
 	if err != nil {
 		return fmt.Errorf("serve log: %w", err)
 	}
-	defer logFile.Close()
+	defer func() { _ = logFile.Close() }()
 
 	cmd := exec.Command(exe, "serve", "--profile", *profilePath, "--addr", *addr)
 	cmd.Stdout = logFile
@@ -65,7 +65,7 @@ func runAssert(args []string) error {
 	if err != nil {
 		return fmt.Errorf("POST message: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var accepted struct {
 		ID string `json:"id"`
 	}
@@ -103,7 +103,7 @@ func waitReady(url string, timeout time.Duration) error {
 	for time.Now().Before(deadline) {
 		resp, err := http.Get(url)
 		if err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
 				return nil
 			}
@@ -124,7 +124,7 @@ func fetchMessageStatus(base, id string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var body struct {
 		Status string `json:"status"`
 	}

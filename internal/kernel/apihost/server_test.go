@@ -485,7 +485,7 @@ func TestSSE_LookaheadEnrichmentOnOpening(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	// Drain initial coverage event.
 	buf := make([]byte, 8192)
@@ -564,7 +564,7 @@ func TestSSE_NoBus_Returns503(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Errorf("status = %d, want 503", resp.StatusCode)
@@ -586,7 +586,7 @@ func TestSSE_StreamsEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -631,14 +631,16 @@ func TestUI_ServesIndexHTML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET /ui/ status = %d, want 200", resp.StatusCode)
 	}
 
 	var body bytes.Buffer
-	body.ReadFrom(resp.Body)
+	if _, err := body.ReadFrom(resp.Body); err != nil {
+		t.Fatal(err)
+	}
 	if !bytes.Contains(body.Bytes(), []byte("NTN-in-a-Box")) {
 		t.Error("expected 'NTN-in-a-Box' in response body")
 	}

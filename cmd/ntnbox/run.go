@@ -243,7 +243,11 @@ func runRun(args []string) error {
 		if err != nil {
 			return fmt.Errorf("creating recorder: %w", err)
 		}
-		defer rec.Close()
+		defer func() {
+			if err := rec.Close(); err != nil {
+				fmt.Fprintf(os.Stderr, "ntnbox: recorder close: %v\n", err)
+			}
+		}()
 		if tb != nil {
 			for _, d := range tb.Devices {
 				rec.RegisterDevice(d.ID, d.Eval)

@@ -50,14 +50,16 @@ func TestRecorder_WritesEvents(t *testing.T) {
 		DeviceID: "sandbox-1",
 	})
 
-	rec.Close()
+	if err := rec.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	// Read and verify.
 	f, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	scanner := bufio.NewScanner(f)
 	var records []EventRecord
@@ -114,13 +116,15 @@ func TestRecorder_UsesDeviceEvaluator(t *testing.T) {
 		At:       now,
 		DeviceID: "sandbox-1",
 	})
-	rec.Close()
+	if err := rec.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	f, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	var r EventRecord
 	if err := json.NewDecoder(f).Decode(&r); err != nil {
 		t.Fatal(err)
@@ -149,9 +153,15 @@ func TestReplayer_PublishesDeviceID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.WriteString(`{"type":"coverage","kind":"window_opened","device_id":"sandbox-1","at":"2026-07-08T10:00:00Z","in_coverage":true}` + "\n")
-	f.WriteString(`{"type":"linkstate","device_id":"sandbox-1","delay_ms":42,"jitter_ms":5,"loss_pct":0.2,"bandwidth_kbps":20000,"at":"2026-07-08T10:00:00.1Z"}` + "\n")
-	f.Close()
+	if _, err := f.WriteString(`{"type":"coverage","kind":"window_opened","device_id":"sandbox-1","at":"2026-07-08T10:00:00Z","in_coverage":true}` + "\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(`{"type":"linkstate","device_id":"sandbox-1","delay_ms":42,"jitter_ms":5,"loss_pct":0.2,"bandwidth_kbps":20000,"at":"2026-07-08T10:00:00.1Z"}` + "\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	bus := eventbus.New(eventbus.LinkStateThrottle{Interval: 0, DeltaThreshold: 0})
 	var covEvents []eventbus.CoverageEvent
