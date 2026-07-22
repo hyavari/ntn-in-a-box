@@ -20,9 +20,11 @@ jobs:
       - name: check-fmt vet test build
         run: make check-fmt vet test build
 
+      # Soft-fail until the tree is lint-clean; action@v9 = Node 24 runtime.
+      # golangci-lint must be built with Go >= go.mod (currently 1.26).
       - name: golangci-lint
         continue-on-error: true
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.1.6
+          version: v2.12.2
           args: ./...
