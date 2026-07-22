@@ -351,9 +351,10 @@ Run your CI tests under simulated NTN conditions with a single step:
 
 Requires `ubuntu-latest` (or any Linux runner with `sudo`, `ip`, and
 Go installed). The action builds `ntnbox` from source and runs it with
-`sudo` to create network namespaces. Your job's toolchain (Node, Go,
-Python, etc.) is available to the command since it runs directly on the
-host.
+`sudo` to create network namespaces. Optionally set `ntnbox-version: v0.1.0`
+to download a release binary instead of building from source. Your job's
+toolchain (Node, Go, Python, etc.) is available to the command since it
+runs directly on the host.
 
 ### Inputs
 
@@ -364,6 +365,7 @@ host.
 | `replay` | No* | — | Path to a JSONL recording (overrides `profile`) |
 | `speed` | No | `1` | Replay speed multiplier |
 | `record` | No | — | Path to save a recording of this session |
+| `ntnbox-version` | No | — | GitHub release tag to download (e.g. `v0.1.0`); if unset, build from source |
 
 *Either `profile` or `replay` is required.
 

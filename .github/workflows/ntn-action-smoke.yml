@@ -49,3 +49,16 @@ jobs:
           replay: testdata/sessions/smoke.jsonl
           speed: '100'
           command: echo "replayed"
+
+  # Requires published release v0.1.0 (expected to fail until tagged).
+  smoke-download:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Test download install
+        uses: ./
+        with:
+          ntnbox-version: v0.1.0
+          profile: leo_pass_90s
+          command: echo "hello from release ntnbox"

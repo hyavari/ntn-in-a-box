@@ -16,6 +16,10 @@ inputs:
     default: '1'
   record:
     description: 'Path to save a recording of this session'
+  ntnbox-version:
+    description: 'GitHub release tag to download (e.g. v0.1.0). If unset, build from this Action checkout.'
+    required: false
+    default: ''
 runs:
   using: 'composite'
   steps:
@@ -26,10 +30,23 @@ runs:
         if ! command -v tc &>/dev/null || ! command -v iptables &>/dev/null; then
           sudo apt-get update -qq && sudo apt-get install -y -qq iproute2 iptables >/dev/null
         fi
-        # Skip build if already installed (e.g. pre-built earlier in the job).
+        # Skip if already installed (e.g. pre-built earlier in the job).
         if command -v ntnbox &>/dev/null; then
           exit 0
         fi
+
+        version="${{ inputs.ntnbox-version }}"
+        if [ -n "$version" ]; then
+          asset="ntnbox-linux-amd64"
+          url="https://github.com/hyavari/ntn-in-a-box/releases/download/${version}/${asset}"
+          echo "Downloading $url"
+          curl -fsSL "$url" -o /tmp/ntnbox
+          chmod +x /tmp/ntnbox
+          sudo cp /tmp/ntnbox /usr/local/bin/ntnbox
+          ntnbox --help >/dev/null
+          exit 0
+        fi
+
         # Build ntnbox from source.
         cd "$GITHUB_ACTION_PATH"
         go build -o /tmp/ntnbox ./cmd/ntnbox/
