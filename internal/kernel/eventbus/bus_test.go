@@ -208,7 +208,7 @@ func TestPublishLinkState_ConcurrentPublishAndSubscribeIsRaceFree(t *testing.T) 
 func TestUnsubscribeCoverage(t *testing.T) {
 	b := New(DefaultLinkStateThrottle)
 	var count int
-	unsub := b.SubscribeCoverage(func(ev CoverageEvent) { count++ })
+	unsub := b.SubscribeCoverage(func(_ CoverageEvent) { count++ })
 
 	b.PublishCoverageEvent(CoverageEvent{Kind: KindWindowOpened, At: testStart})
 	if count != 1 {

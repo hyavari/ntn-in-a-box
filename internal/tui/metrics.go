@@ -194,12 +194,8 @@ func (m Model) renderMetricRow(label string, value float64, unit string, history
 // to 7 characters for alignment.
 func formatMetricValue(val float64, unit string) string {
 	var s string
-	if val >= 1000 {
+	if val >= 100 {
 		s = fmt.Sprintf("%.0f%s", val, unit)
-	} else if val >= 100 {
-		s = fmt.Sprintf("%.0f%s", val, unit)
-	} else if val >= 10 {
-		s = fmt.Sprintf("%.1f%s", val, unit)
 	} else {
 		s = fmt.Sprintf("%.1f%s", val, unit)
 	}
@@ -299,7 +295,8 @@ func addrPort(addr string) string {
 // stacked/expanded layout.
 func (m Model) renderStackedHeader() string {
 	var status string
-	if m.isReplay {
+	switch {
+	case m.isReplay:
 		if m.replayDone {
 			status = styleStatusGreen.Render("✓ DONE")
 		} else {
@@ -309,9 +306,9 @@ func (m Model) renderStackedHeader() string {
 			}
 			status = styleDim.Render(fmt.Sprintf("▶ %.0f%%", pct))
 		}
-	} else if m.inCoverage {
+	case m.inCoverage:
 		status = styleStatusGreen.Render("▲ IN")
-	} else {
+	default:
 		status = styleStatusRed.Render("▼ OUT")
 	}
 

@@ -64,17 +64,12 @@ func TestPrepareDarwinCmdMounts_ScriptMountsProjectRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mounts, rewritten, err := prepareDarwinCmdMounts(root, []string{
-		"env", "FOO=1", "../ntnkit/scripts/ntnbox-ci-smoke.sh",
-	})
-	// cwd is root but script path is relative to ntn-in-a-box style; use abs via join
-	_ = mounts
-	// Re-run with cwd = a sibling folder like ntn-in-a-box
+	// cwd is a sibling of the project so the relative script path resolves.
 	sib := filepath.Join(root, "ntn-in-a-box")
 	if err := os.MkdirAll(sib, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mounts, rewritten, err = prepareDarwinCmdMounts(sib, []string{
+	mounts, rewritten, err := prepareDarwinCmdMounts(sib, []string{
 		"env", "FOO=1", "../ntnkit/scripts/ntnbox-ci-smoke.sh",
 	})
 	if err != nil {

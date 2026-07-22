@@ -57,7 +57,8 @@ func Parse(r io.Reader) ([]Satellite, error) {
 	i := 0
 	for i < len(lines) {
 		// Try to identify the start of a TLE entry.
-		if isTLELine1(lines[i]) {
+		switch {
+		case isTLELine1(lines[i]):
 			// 2-line format: line1 + line2
 			if i+1 >= len(lines) {
 				return nil, fmt.Errorf("tle: line %d: line 1 without matching line 2", i+1)
@@ -71,7 +72,7 @@ func Parse(r io.Reader) ([]Satellite, error) {
 			}
 			sats = append(sats, sat)
 			i += 2
-		} else if i+2 < len(lines) && isTLELine1(lines[i+1]) && isTLELine2(lines[i+2]) {
+		case i+2 < len(lines) && isTLELine1(lines[i+1]) && isTLELine2(lines[i+2]):
 			// 3-line format: name + line1 + line2
 			sat, err := parseSatellite(lines[i], lines[i+1], lines[i+2])
 			if err != nil {
@@ -79,7 +80,7 @@ func Parse(r io.Reader) ([]Satellite, error) {
 			}
 			sats = append(sats, sat)
 			i += 3
-		} else {
+		default:
 			return nil, fmt.Errorf("tle: line %d: unrecognized format: %q", i+1, lines[i])
 		}
 	}

@@ -9,7 +9,7 @@ import (
 )
 
 func TestFetchMessageStatus(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "delivered", "id": "m1"})
 	}))
 	defer srv.Close()
@@ -25,7 +25,7 @@ func TestFetchMessageStatus(t *testing.T) {
 
 func TestWaitReady(t *testing.T) {
 	n := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		n++
 		if n < 2 {
 			http.Error(w, "nope", http.StatusServiceUnavailable)

@@ -389,7 +389,7 @@ func TestGetLookaheadDeviceNotFound(t *testing.T) {
 
 type evalOnlyStub struct{}
 
-func (evalOnlyStub) Evaluate(now time.Time) (condition.LinkState, condition.CoverageState) {
+func (evalOnlyStub) Evaluate(_ time.Time) (condition.LinkState, condition.CoverageState) {
 	return condition.LinkState{}, condition.CoverageState{InCoverage: true, UntilNextTransitionSec: 10}
 }
 
@@ -654,7 +654,7 @@ func TestUI_RedirectsFromUI(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
-	client := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
+	client := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 		return http.ErrUseLastResponse
 	}}
 
