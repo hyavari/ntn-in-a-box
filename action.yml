@@ -17,7 +17,7 @@ inputs:
   record:
     description: 'Path to save a recording of this session'
   ntnbox-version:
-    description: 'GitHub release tag to download (e.g. v0.1.1). If unset, build from this Action checkout.'
+    description: 'GitHub release tag to download (e.g. v0.1.2). If unset, build from this Action checkout.'
     required: false
     default: ''
 runs:

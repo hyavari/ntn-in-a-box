@@ -61,6 +61,7 @@ On macOS, `ntnbox run` auto-detects the platform and transparently
 re-invokes itself inside a Docker container. Prefer a published image:
 
 ```bash
+# Public image — no docker login required
 docker pull ghcr.io/hyavari/ntn-in-a-box:latest
 docker tag ghcr.io/hyavari/ntn-in-a-box:latest ntnbox:latest
 # or build locally: make docker
@@ -324,14 +325,15 @@ ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- python3 samples/pyth
 ```
 
 Published images (linux/amd64 + linux/arm64) live at
-`ghcr.io/hyavari/ntn-in-a-box` (`:latest` and `:vX.Y.Z` on each release).
-The image includes ntnbox, poller, curl, and **Node.js 24 + pnpm** so
-macOS developers can run JS/TS apps under `ntnbox run` (host Darwin Node
-binaries cannot execute inside the Linux container). The Darwin proxy
-bind-mounts referenced project paths and overlays a Linux `node_modules`
-volume for JS projects. Python samples still need a Linux host runtime
-today. Shell and Go samples work on macOS via the Docker proxy
-(cross-compiled / bind-mounted automatically).
+[`ghcr.io/hyavari/ntn-in-a-box`](https://github.com/hyavari/ntn-in-a-box/pkgs/container/ntn-in-a-box)
+(`:latest` and `:vX.Y.Z` on each release). The package is **public** — anonymous
+`docker pull` works without `docker login`. The image includes ntnbox, poller,
+curl, and **Node.js 24 + pnpm** so macOS developers can run JS/TS apps under
+`ntnbox run` (host Darwin Node binaries cannot execute inside the Linux
+container). The Darwin proxy bind-mounts referenced project paths and overlays
+a Linux `node_modules` volume for JS projects. Python samples still need a
+Linux host runtime today. Shell and Go samples work on macOS via the Docker
+proxy (cross-compiled / bind-mounted automatically).
 
 Release binaries (no Docker): `ntnbox-linux-amd64`, `ntnbox-linux-arm64`,
 and `ntnbox-darwin-arm64` on the

@@ -50,24 +50,14 @@ jobs:
           speed: '100'
           command: echo "replayed"
 
-  # Runs only when release asset v0.1.1 exists (skipped until tagged).
   smoke-download:
     runs-on: ubuntu-latest
     steps:
-      - name: Check release asset
-        id: asset
-        continue-on-error: true
-        run: |
-          curl -fsSIL \
-            "https://github.com/hyavari/ntn-in-a-box/releases/download/v0.1.1/ntnbox-linux-amd64"
-
       - uses: actions/checkout@v6
-        if: steps.asset.outcome == 'success'
 
       - name: Test download install
-        if: steps.asset.outcome == 'success'
         uses: ./
         with:
-          ntnbox-version: v0.1.1
+          ntnbox-version: v0.1.2
           profile: leo_pass_90s
           command: echo "hello from release ntnbox"
