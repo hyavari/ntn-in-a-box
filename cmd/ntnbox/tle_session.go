@@ -60,7 +60,7 @@ func bootstrapTLE(opts tleBootstrapOpts) (*tleBootstrap, error) {
 		fmt.Fprintf(os.Stderr, "ntnbox: using satellite %q (NORAD ID %d) — use --sat to select a different one\n",
 			sat.Name, sat.NoradID)
 	}
-	if age, err := tle.TLEAge(sat, time.Now()); err == nil && age > 14*24*time.Hour {
+	if age, err := tle.Age(sat, time.Now()); err == nil && age > 14*24*time.Hour {
 		fmt.Fprintf(os.Stderr, "ntnbox: warning: TLE is %.0f days old (accuracy degrades after ~14 days)\n", age.Hours()/24)
 	}
 

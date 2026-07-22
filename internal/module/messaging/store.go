@@ -10,14 +10,22 @@ import (
 	"time"
 )
 
+// MaxBodyBytes is the maximum accepted message body size in bytes.
 const MaxBodyBytes = 1024
+
+// MaxContentTypeBytes is the maximum accepted content-type string length.
 const MaxContentTypeBytes = 128
+
+// MaxMessages is the maximum number of messages retained in the store.
 const MaxMessages = 1000
-const MaxRequestBytes = 8192 // HTTP body cap before JSON decode
+
+// MaxRequestBytes is the HTTP body cap before JSON decode.
+const MaxRequestBytes = 8192
 
 // Status is the store-facing message lifecycle.
 type Status string
 
+// Message lifecycle statuses.
 const (
 	StatusAccepted  Status = "accepted"
 	StatusQueued    Status = "queued"
@@ -52,9 +60,13 @@ func NewStore() *Store {
 }
 
 var (
-	ErrBodyTooLarge        = errors.New("messaging: body too large")
-	ErrEmptyBody           = errors.New("messaging: empty body")
-	ErrStoreFull           = errors.New("messaging: store full")
+	// ErrBodyTooLarge is returned when a message body exceeds MaxBodyBytes.
+	ErrBodyTooLarge = errors.New("messaging: body too large")
+	// ErrEmptyBody is returned when a message body is empty.
+	ErrEmptyBody = errors.New("messaging: empty body")
+	// ErrStoreFull is returned when the store cannot accept more messages.
+	ErrStoreFull = errors.New("messaging: store full")
+	// ErrContentTypeTooLarge is returned when content_type exceeds MaxContentTypeBytes.
 	ErrContentTypeTooLarge = errors.New("messaging: content_type too large")
 )
 
@@ -139,7 +151,7 @@ func (s *Store) PendingFor(to string) []*Message {
 
 // ClaimQueued atomically moves a queued message to in_flight.
 // Returns a copy of the message and true if the claim succeeded.
-func (s *Store) ClaimQueued(id string, at time.Time) (*Message, bool) {
+func (s *Store) ClaimQueued(id string, _ time.Time) (*Message, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	m, ok := s.byID[id]

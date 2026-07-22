@@ -265,9 +265,9 @@ func samplePass(sgp4Sat satellite.Satellite, obsLL satellite.LatLong, obsAltKm f
 	return samples, maxElev, maxElevTime
 }
 
-// TLEAge returns how old the TLE is relative to a reference time.
+// Age returns how old the TLE is relative to a reference time.
 // Useful for warning users about stale TLE data.
-func TLEAge(sat Satellite, refTime time.Time) (time.Duration, error) {
+func Age(sat Satellite, refTime time.Time) (time.Duration, error) {
 	tleTime, err := tleEpoch(sat.Line1)
 	if err != nil {
 		return 0, err

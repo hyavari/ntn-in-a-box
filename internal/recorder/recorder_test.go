@@ -16,7 +16,7 @@ import (
 
 type mockEval struct{}
 
-func (mockEval) Evaluate(now time.Time) (condition.LinkState, condition.CoverageState) {
+func (mockEval) Evaluate(_ time.Time) (condition.LinkState, condition.CoverageState) {
 	return condition.LinkState{}, condition.CoverageState{
 		InCoverage:             true,
 		ElapsedSec:             5.0,
@@ -139,7 +139,7 @@ func TestRecorder_UsesDeviceEvaluator(t *testing.T) {
 
 type mockEvalOut struct{}
 
-func (mockEvalOut) Evaluate(now time.Time) (condition.LinkState, condition.CoverageState) {
+func (mockEvalOut) Evaluate(_ time.Time) (condition.LinkState, condition.CoverageState) {
 	return condition.LinkState{}, condition.CoverageState{
 		InCoverage:             false,
 		ElapsedSec:             1,
@@ -267,7 +267,7 @@ func TestReplayer_SkipsBadLines(t *testing.T) {
 
 	bus := eventbus.New(eventbus.LinkStateThrottle{Interval: 0, DeltaThreshold: 0})
 	var count int
-	bus.SubscribeLinkState(func(ev eventbus.LinkStateEvent) { count++ })
+	bus.SubscribeLinkState(func(_ eventbus.LinkStateEvent) { count++ })
 
 	replayer := NewReplayer(path, bus, 1000)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -288,7 +288,7 @@ func TestReplayer_Cancellation(t *testing.T) {
 	}
 	for i := range 100 {
 		ts := time.Date(2026, 7, 8, 10, 0, i, 0, time.UTC).Format(time.RFC3339Nano)
-		if _, err := f.WriteString(fmt.Sprintf(`{"type":"linkstate","delay_ms":42,"jitter_ms":5,"loss_pct":0.2,"bandwidth_kbps":20000,"at":"%s"}`+"\n", ts)); err != nil {
+		if _, err := fmt.Fprintf(f, `{"type":"linkstate","delay_ms":42,"jitter_ms":5,"loss_pct":0.2,"bandwidth_kbps":20000,"at":"%s"}`+"\n", ts); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -298,7 +298,7 @@ func TestReplayer_Cancellation(t *testing.T) {
 
 	bus := eventbus.New(eventbus.LinkStateThrottle{Interval: 0, DeltaThreshold: 0})
 	var count int
-	bus.SubscribeLinkState(func(ev eventbus.LinkStateEvent) { count++ })
+	bus.SubscribeLinkState(func(_ eventbus.LinkStateEvent) { count++ })
 
 	ctx, cancel := context.WithCancel(context.Background())
 	replayer := NewReplayer(path, bus, 1) // real-time speed

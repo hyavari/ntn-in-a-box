@@ -50,7 +50,7 @@ func (m Model) renderLeftPanel(width int) string {
 }
 
 // renderCoverageStatus renders the ▲/▼ status indicator.
-func (m Model) renderCoverageStatus(width int) string {
+func (m Model) renderCoverageStatus(_ int) string {
 	if m.isReplay {
 		if m.replayDone {
 			if m.replayErr != nil {
@@ -176,7 +176,7 @@ func (m Model) renderLinkMetrics(width int) string {
 }
 
 // renderMetricRow renders one metric: label, value, and sparkline.
-func (m Model) renderMetricRow(label string, value float64, unit string, history []float64, width int) string {
+func (m Model) renderMetricRow(label string, value float64, unit string, history []float64, _ int) string {
 	valStr := formatMetricValue(value, unit)
 	spark := renderSparkline(history)
 

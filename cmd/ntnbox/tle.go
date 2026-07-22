@@ -80,7 +80,7 @@ func runTLEGenerate(args []string) error {
 	}
 
 	// Check TLE age.
-	age, err := tle.TLEAge(sat, time.Now())
+	age, err := tle.Age(sat, time.Now())
 	if err == nil && age > 14*24*time.Hour {
 		fmt.Fprintf(os.Stderr, "ntnbox: warning: TLE is %.0f days old (accuracy degrades after ~14 days)\n", age.Hours()/24)
 	}

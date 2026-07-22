@@ -36,13 +36,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "up":
 		if m.ready {
-			m.viewport.LineUp(1)
+			m.viewport.ScrollUp(1)
 			m.followMode = false
 		}
 
 	case "down":
 		if m.ready {
-			m.viewport.LineDown(1)
+			m.viewport.ScrollDown(1)
 			if m.viewport.AtBottom() {
 				m.followMode = true
 			}
@@ -50,13 +50,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "pgup":
 		if m.ready {
-			m.viewport.HalfViewUp()
+			m.viewport.HalfPageUp()
 			m.followMode = false
 		}
 
 	case "pgdown":
 		if m.ready {
-			m.viewport.HalfViewDown()
+			m.viewport.HalfPageDown()
 			if m.viewport.AtBottom() {
 				m.followMode = true
 			}

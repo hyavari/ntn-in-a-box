@@ -365,7 +365,7 @@ func TestPublishPositionFalseSuppressesEvents(t *testing.T) {
 	bus := eventbus.New(eventbus.DefaultLinkStateThrottle)
 	var mu sync.Mutex
 	var n int
-	bus.SubscribeSatellitePosition(func(ev eventbus.SatellitePositionEvent) {
+	bus.SubscribeSatellitePosition(func(_ eventbus.SatellitePositionEvent) {
 		mu.Lock()
 		n++
 		mu.Unlock()
@@ -409,7 +409,7 @@ func TestPublishPositionDefaultEmits(t *testing.T) {
 	bus := eventbus.New(eventbus.DefaultLinkStateThrottle)
 	var mu sync.Mutex
 	var n int
-	bus.SubscribeSatellitePosition(func(ev eventbus.SatellitePositionEvent) {
+	bus.SubscribeSatellitePosition(func(_ eventbus.SatellitePositionEvent) {
 		mu.Lock()
 		n++
 		mu.Unlock()

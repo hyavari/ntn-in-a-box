@@ -95,11 +95,11 @@ func (m Model) renderStacked() string {
 func (m Model) viewportDimensions() (width, height int) {
 	if m.layoutMode == LayoutStacked || m.expandedMode {
 		// Stacked: 1 header line + 1 separator = 2 chrome lines.
-		return m.width, max(1, m.height-2)
+		return m.width, maxInt(1, m.height-2)
 	}
 	// Split: right panel is 60% width, full height minus header line.
 	rightWidth := m.width - m.width*40/100 - 1
-	return rightWidth, max(1, m.height-2)
+	return rightWidth, maxInt(1, m.height-2)
 }
 
 // renderOutputContent returns the ring buffer content as a single
@@ -109,7 +109,7 @@ func (m Model) renderOutputContent() string {
 	return strings.Join(lines, "\n")
 }
 
-func max(a, b int) int {
+func maxInt(a, b int) int {
 	if a > b {
 		return a
 	}

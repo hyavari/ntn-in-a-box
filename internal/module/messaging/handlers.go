@@ -1,3 +1,4 @@
+// Package messaging implements store-and-forward messaging between devices and cloud.
 package messaging
 
 import (

@@ -19,8 +19,8 @@ func replayPlatformGate(args []string) error {
 func replayViaDarwinDocker(args []string) error {
 	dockerPath, err := exec.LookPath("docker")
 	if err != nil {
-		return errors.New("ntnbox replay requires Linux network namespaces.\n" +
-			"On macOS, Docker is required but was not found on PATH.")
+		return errors.New("ntnbox replay requires Linux network namespaces; " +
+			"on macOS, Docker is required but was not found on PATH")
 	}
 
 	// Parse replay flags.

@@ -226,7 +226,7 @@ func TestUnsubscribeCoverage(t *testing.T) {
 func TestUnsubscribeLinkState(t *testing.T) {
 	b := New(LinkStateThrottle{Interval: 0, DeltaThreshold: 0})
 	var count int
-	unsub := b.SubscribeLinkState(func(ev LinkStateEvent) { count++ })
+	unsub := b.SubscribeLinkState(func(_ LinkStateEvent) { count++ })
 
 	b.PublishLinkState(condition.LinkState{DelayMs: 10}, testStart)
 	if count != 1 {
@@ -244,8 +244,8 @@ func TestUnsubscribeLinkState(t *testing.T) {
 func TestUnsubscribe_OtherSubscribersUnaffected(t *testing.T) {
 	b := New(DefaultLinkStateThrottle)
 	var countA, countB int
-	unsubA := b.SubscribeCoverage(func(ev CoverageEvent) { countA++ })
-	b.SubscribeCoverage(func(ev CoverageEvent) { countB++ })
+	unsubA := b.SubscribeCoverage(func(_ CoverageEvent) { countA++ })
+	b.SubscribeCoverage(func(_ CoverageEvent) { countB++ })
 
 	b.PublishCoverageEvent(CoverageEvent{Kind: KindWindowOpened, At: testStart})
 	if countA != 1 || countB != 1 {
@@ -263,9 +263,9 @@ func TestUnsubscribe_OtherSubscribersUnaffected(t *testing.T) {
 	}
 }
 
-func TestUnsubscribe_CalledTwiceIsSafe(t *testing.T) {
+func TestUnsubscribe_CalledTwiceIsSafe(_ *testing.T) {
 	b := New(DefaultLinkStateThrottle)
-	unsub := b.SubscribeCoverage(func(ev CoverageEvent) {})
+	unsub := b.SubscribeCoverage(func(_ CoverageEvent) {})
 
 	unsub()
 	unsub() // second call should not panic

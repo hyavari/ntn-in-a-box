@@ -25,17 +25,17 @@ type SatPosition struct {
 func geodeticAt(sgp4Sat satellite.Satellite, obsLL satellite.LatLong, obsAltKm float64, t time.Time) (SatPosition, bool) {
 	t = t.UTC()
 	year, month, day := t.Date()
-	hour, min, sec := t.Clock()
+	hour, minute, sec := t.Clock()
 
-	pos, _ := satellite.Propagate(sgp4Sat, year, int(month), day, hour, min, sec)
+	pos, _ := satellite.Propagate(sgp4Sat, year, int(month), day, hour, minute, sec)
 
 	// Propagation failure (zero vector).
 	if pos.X == 0 && pos.Y == 0 && pos.Z == 0 {
 		return SatPosition{ElevationDeg: -90}, false
 	}
 
-	jday := satellite.JDay(year, int(month), day, hour, min, sec)
-	gmst := satellite.GSTimeFromDate(year, int(month), day, hour, min, sec)
+	jday := satellite.JDay(year, int(month), day, hour, minute, sec)
+	gmst := satellite.GSTimeFromDate(year, int(month), day, hour, minute, sec)
 
 	// Geodetic position.
 	alt, _, latLon := satellite.ECIToLLA(pos, gmst)

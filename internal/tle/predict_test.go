@@ -136,7 +136,7 @@ func TestPredictPasses_SampleInterval(t *testing.T) {
 	}
 }
 
-func TestTLEAge(t *testing.T) {
+func TestAge(t *testing.T) {
 	sats, err := ParseFile("../../testdata/tle/iss.tle")
 	if err != nil {
 		t.Fatalf("ParseFile: %v", err)
@@ -146,9 +146,9 @@ func TestTLEAge(t *testing.T) {
 	// Reference time: 2024, day 114 (14 days later).
 	refTime := time.Date(2024, 4, 23, 12, 0, 0, 0, time.UTC)
 
-	age, err := TLEAge(sats[0], refTime)
+	age, err := Age(sats[0], refTime)
 	if err != nil {
-		t.Fatalf("TLEAge: %v", err)
+		t.Fatalf("Age: %v", err)
 	}
 
 	// Should be approximately 14 days.

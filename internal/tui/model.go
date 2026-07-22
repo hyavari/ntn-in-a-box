@@ -12,6 +12,7 @@ import (
 // LayoutMode selects between split and stacked rendering.
 type LayoutMode int
 
+// Layout modes for the TUI dashboard.
 const (
 	LayoutSplit   LayoutMode = iota // metrics left, output right
 	LayoutStacked                   // compact header, output below
@@ -281,12 +282,12 @@ func (m *Model) upsertMessage(row messageRow) {
 		}
 	}
 	m.messages = append(m.messages, row)
-	cap := m.messageCap
-	if cap <= 0 {
-		cap = messageListCap
+	limit := m.messageCap
+	if limit <= 0 {
+		limit = messageListCap
 	}
-	if len(m.messages) > cap {
-		m.messages = m.messages[len(m.messages)-cap:]
+	if len(m.messages) > limit {
+		m.messages = m.messages[len(m.messages)-limit:]
 	}
 	maxScroll := len(m.messages) - messageVisibleRows
 	if maxScroll < 0 {
@@ -337,10 +338,10 @@ func (m *Model) cycleFocus() (string, bool) {
 	return next, true
 }
 
-func pushSample(history []float64, val float64, max int) []float64 {
+func pushSample(history []float64, val float64, maxLen int) []float64 {
 	history = append(history, val)
-	if len(history) > max {
-		history = history[len(history)-max:]
+	if len(history) > maxLen {
+		history = history[len(history)-maxLen:]
 	}
 	return history
 }

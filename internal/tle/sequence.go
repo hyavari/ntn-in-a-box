@@ -344,7 +344,7 @@ func (se *SequenceEvaluator) Observer() Observer {
 	return se.observer
 }
 
-// Sat returns the stored satellite TLE data.
+// SatData returns the stored satellite TLE data.
 func (se *SequenceEvaluator) SatData() Satellite {
 	return se.sat
 }

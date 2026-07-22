@@ -15,15 +15,11 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # Full `make check` also runs golangci-lint; that currently reports
-      # pre-existing issues. CI gates on the green subset until lint is clean.
       - name: check-fmt vet test build
         run: make check-fmt vet test build
 
-      # Soft-fail until the tree is lint-clean; action@v9 = Node 24 runtime.
-      # golangci-lint must be built with Go >= go.mod (currently 1.26).
+      # action@v9 = Node 24; golangci-lint must be built with Go >= go.mod (1.26).
       - name: golangci-lint
-        continue-on-error: true
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2

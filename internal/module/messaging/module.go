@@ -13,6 +13,7 @@ import (
 	"github.com/hyavari/ntn-in-a-box/pkg/module"
 )
 
+// CloudRecipient is the special recipient id for cloud-bound messages.
 const CloudRecipient = "cloud"
 
 // DeviceExists reports whether a device id is registered (not cloud).

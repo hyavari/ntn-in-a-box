@@ -62,7 +62,8 @@ func runViaDarwinDocker(args []string) error {
 		// Pass through extra args, rewriting --link-model path if present.
 		for i := 0; i < len(parsed.extraArgs); i++ {
 			arg := parsed.extraArgs[i]
-			if arg == "--link-model" && i+1 < len(parsed.extraArgs) {
+			switch {
+			case arg == "--link-model" && i+1 < len(parsed.extraArgs):
 				absModel, err := filepath.Abs(parsed.extraArgs[i+1])
 				if err != nil {
 					return fmt.Errorf("resolving link-model path: %w", err)
@@ -70,7 +71,7 @@ func runViaDarwinDocker(args []string) error {
 				dockerArgs = append(dockerArgs, "-v", absModel+":/tmp/linkmodel.yaml:ro")
 				containerCmd = append(containerCmd, "--link-model", "/tmp/linkmodel.yaml")
 				i++ // skip the value
-			} else if len(arg) > 13 && arg[:13] == "--link-model=" {
+			case len(arg) > 13 && arg[:13] == "--link-model=":
 				modelPath := arg[13:]
 				absModel, err := filepath.Abs(modelPath)
 				if err != nil {
@@ -78,7 +79,7 @@ func runViaDarwinDocker(args []string) error {
 				}
 				dockerArgs = append(dockerArgs, "-v", absModel+":/tmp/linkmodel.yaml:ro")
 				containerCmd = append(containerCmd, "--link-model", "/tmp/linkmodel.yaml")
-			} else {
+			default:
 				containerCmd = append(containerCmd, arg)
 			}
 		}
