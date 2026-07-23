@@ -2,18 +2,18 @@ name: Action Smoke Test
 on:
   push:
     paths:
-      - 'action.yml'
-      - 'cmd/ntnbox/**'
-      - 'internal/**'
-      - 'testdata/**'
-      - '.github/workflows/ntn-action-smoke.yml'
+      - "action.yml"
+      - "cmd/ntnbox/**"
+      - "internal/**"
+      - "testdata/**"
+      - ".github/workflows/ntn-action-smoke.yml"
   pull_request:
     paths:
-      - 'action.yml'
-      - 'cmd/ntnbox/**'
-      - 'internal/**'
-      - 'testdata/**'
-      - '.github/workflows/ntn-action-smoke.yml'
+      - "action.yml"
+      - "cmd/ntnbox/**"
+      - "internal/**"
+      - "testdata/**"
+      - ".github/workflows/ntn-action-smoke.yml"
 
 jobs:
   smoke:
@@ -23,7 +23,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.26'
+          go-version: "1.26"
 
       # Pre-build so the action's install step is a no-op.
       - name: Pre-build ntnbox
@@ -47,7 +47,7 @@ jobs:
         uses: ./
         with:
           replay: testdata/sessions/smoke.jsonl
-          speed: '100'
+          speed: "100"
           command: echo "replayed"
 
   smoke-download:
@@ -58,6 +58,6 @@ jobs:
       - name: Test download install
         uses: ./
         with:
-          ntnbox-version: v0.1.2
+          ntnbox-version: v0.1.3
           profile: leo_pass_90s
           command: echo "hello from release ntnbox"
