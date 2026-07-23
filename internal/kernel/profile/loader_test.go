@@ -48,6 +48,13 @@ func TestLoadFile_SampleProfiles(t *testing.T) {
 			wantWindow:   10,
 			wantCurveLen: 2,
 		},
+		{
+			file:         "geo_blockage.yaml",
+			wantName:     "geo_blockage",
+			wantMode:     ModeContinuous,
+			wantWindow:   0,
+			wantCurveLen: 1,
+		},
 	}
 
 	for _, tt := range tests {
@@ -70,6 +77,23 @@ func TestLoadFile_SampleProfiles(t *testing.T) {
 				t.Errorf("len(Curves.DelayMs) = %d, want %d", len(p.Curves.DelayMs), tt.wantCurveLen)
 			}
 		})
+	}
+}
+
+func TestLoadFile_GeoBlockageHasBlockages(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "testdata", "profiles", "geo_blockage.yaml")
+	p, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile(%s) returned error: %v", path, err)
+	}
+	if len(p.Blockages) != 2 {
+		t.Fatalf("len(Blockages) = %d, want 2", len(p.Blockages))
+	}
+	if p.Schedule.LookaheadSec != 0 {
+		t.Errorf("LookaheadSec = %v, want 0 (blockages are surprise drops)", p.Schedule.LookaheadSec)
+	}
+	if p.Blockages[0].OffsetSec != 60 || p.Blockages[0].DurationSec != 8 {
+		t.Errorf("Blockages[0] = %+v, want {60, 8}", p.Blockages[0])
 	}
 }
 

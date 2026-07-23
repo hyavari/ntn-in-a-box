@@ -17,6 +17,8 @@ type sseCoverageEvent struct {
 	InCoverage            bool     `json:"in_coverage"`
 	ElapsedSec            float64  `json:"elapsed_sec"`
 	UntilNextTransition   float64  `json:"until_next_transition"`
+	CyclePosSec           float64  `json:"cycle_pos_sec"`
+	InBlockage            bool     `json:"in_blockage,omitempty"`
 	At                    string   `json:"at"`
 	DeviceID              string   `json:"device_id,omitempty"`
 	LookaheadSec          *float64 `json:"lookahead_sec,omitempty"`
@@ -75,6 +77,8 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			payload.InCoverage = cov.InCoverage
 			payload.ElapsedSec = cov.ElapsedSec
 			payload.UntilNextTransition = cov.UntilNextTransitionSec
+			payload.CyclePosSec = cov.CyclePosSec
+			payload.InBlockage = cov.InBlockage
 		} else if payload.ElapsedSec == 0 && payload.UntilNextTransition == 0 {
 			// Fallback: derive from event kind.
 			payload.InCoverage = ev.Kind == eventbus.KindWindowOpened || ev.Kind == eventbus.KindWindowOpening
@@ -199,6 +203,8 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			InCoverage:          cov.InCoverage,
 			ElapsedSec:          cov.ElapsedSec,
 			UntilNextTransition: finiteSec(cov.UntilNextTransitionSec),
+			CyclePosSec:         cov.CyclePosSec,
+			InBlockage:          cov.InBlockage,
 			At:                  now.Format(time.RFC3339),
 		}
 		if data, err := json.Marshal(initial); err == nil {

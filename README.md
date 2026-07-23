@@ -373,7 +373,7 @@ runs directly on the host.
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `profile` | Yes* | — | Profile name (`leo_pass_90s`, `geo_steady`, `d2c_burst`, `sos_burst`, `sos_hostile`) or path to YAML |
+| `profile` | Yes* | — | Profile name (`leo_pass_90s`, `geo_steady`, `d2c_burst`, `sos_burst`, `sos_hostile`, `geo_blockage`) or path to YAML |
 | `command` | Yes | — | Command to run under NTN conditions |
 | `replay` | No* | — | Path to a JSONL recording (overrides `profile`) |
 | `speed` | No | `1` | Replay speed multiplier |
@@ -534,14 +534,52 @@ curves:
   # jitter_ms, loss_pct, bandwidth_kbps follow the same shape
 ```
 
+#### Blockages (unscheduled outages)
+
+Any profile may add a `blockages` list — repeating, *unscheduled* link
+drops layered on the schedule (a tunnel, a cutting, dense tree cover).
+Unlike a periodic window close, a blockage has **no lookahead**
+(`lookahead_sec: 0`): a moving vehicle cannot predict a tunnel from
+orbital mechanics, so apps must detect the drop reactively via timeouts.
+This models the automotive case where a GEO link is always in view yet
+still drops as the car moves.
+
+```yaml
+name: geo_blockage
+schedule:
+  mode: continuous
+  period_sec: 300
+  lookahead_sec: 0        # surprise drops, no advance notice
+blockages:
+  - { offset_sec: 60, duration_sec: 8 }    # short tunnel
+  - { offset_sec: 180, duration_sec: 20 }  # tree-lined ridge
+# curves: … (as above)
+```
+
+Blockages repeat every `period_sec`, are active on
+`[offset_sec, offset_sec + duration_sec)`, must fit within the cycle, and
+must be strictly ascending and non-overlapping. Primarily for continuous
+profiles, but permitted on any mode.
+
+Try it (macOS or Linux):
+
+```bash
+./scripts/demo-blockage.sh          # fast demo (drops within ~10s) + GUI
+./scripts/demo-blockage.sh --tui    # live TUI dashboard
+./scripts/demo-blockage.sh --real   # the realistic 300s geo_blockage profile
+```
+
 Sample profiles included: `leo_pass_90s`, `geo_steady`, `d2c_burst`,
-`sos_burst`, `sos_hostile`.
+`sos_burst`, `sos_hostile`, `geo_blockage`.
 
 ### Out-of-coverage behavior
 
-When a coverage window closes, the Dev Sandbox sets 100% packet loss —
-packets silently drop, mimicking real satellite behavior (the signal
-disappears without sending ICMP unreachable or RST). Apps must detect
+When coverage is lost — a scheduled window close **or** an unscheduled
+blockage — the Dev Sandbox sets 100% packet loss: packets silently drop,
+mimicking real satellite behavior (the signal disappears without sending
+ICMP unreachable or RST). Apps must detect the outage via timeouts.
+The TUI/GUI label **BLOCKED** for blockage drops vs **OUT OF COVERAGE**
+for scheduled gaps.
 outages via timeouts, which is exactly what NTN-aware apps need to handle.
 
 ## API reference

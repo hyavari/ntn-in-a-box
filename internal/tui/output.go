@@ -47,9 +47,12 @@ func (m Model) renderOutputHeader(width int) string {
 // output ring buffer when a coverage transition occurs.
 func (m *Model) injectCoverageSeparator(opened bool, info float64) {
 	var line string
-	if opened {
+	switch {
+	case opened:
 		line = fmt.Sprintf("── ▲ coverage opened · %.0fs window ──", info)
-	} else {
+	case m.inBlockage:
+		line = fmt.Sprintf("── ▼ blocked · clears in %.0fs ──", info)
+	default:
 		line = fmt.Sprintf("── ▼ coverage lost · next window in %.0fs ──", info)
 	}
 	m.output.Write(line)

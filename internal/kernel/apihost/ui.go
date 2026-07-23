@@ -18,7 +18,14 @@ func (s *Server) registerUI() {
 	}
 
 	fileServer := http.FileServerFS(sub)
-	s.mux.Handle("GET /ui/", http.StripPrefix("/ui/", fileServer))
+	// Disable caching so rebuilds (esp. app.js progress/countdown fixes)
+	// show up without a hard refresh — browsers otherwise keep stale UI.
+	noCache := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		fileServer.ServeHTTP(w, r)
+	})
+	s.mux.Handle("GET /ui/", http.StripPrefix("/ui/", noCache))
 	s.mux.HandleFunc("GET /ui", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/ui/", http.StatusMovedPermanently)
 	})

@@ -37,6 +37,13 @@ type Model struct {
 	remainingSec    float64
 	inLookahead     bool
 	elapsedSec      float64
+	// cyclePosSec is position within the schedule period. Progress bars
+	// use this (not ElapsedSec) so a mid-window/continuous blockage does
+	// not reset the bar — ElapsedSec is blockage-relative while blocked.
+	cyclePosSec float64
+	// inBlockage is true when out of coverage due to an unscheduled
+	// blockage (vs a scheduled periodic gap).
+	inBlockage bool
 
 	// Link metrics.
 	linkState condition.LinkState
@@ -136,6 +143,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.inCoverage = msg.InCoverage
 		m.elapsedSec = msg.ElapsedSec
 		m.remainingSec = msg.UntilNextTransition
+		m.cyclePosSec = msg.CyclePosSec
+		m.inBlockage = msg.InBlockage && !msg.InCoverage
 		m.coveragePercent = m.computeCoveragePercent()
 		m.inLookahead = m.inCoverage && m.remainingSec <= m.profile.Schedule.LookaheadSec
 
@@ -194,14 +203,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case TickMsg:
-		if m.remainingSec > 0 {
-			m.remainingSec -= 1.0
-			if m.remainingSec < 0 {
-				m.remainingSec = 0
+		period := m.profile.Schedule.PeriodSec
+		if period > 0 {
+			m.cyclePosSec += 1.0
+			if m.cyclePosSec >= period {
+				m.cyclePosSec -= period
 			}
-			m.coveragePercent = m.computeCoveragePercent()
-			m.inLookahead = m.inCoverage && m.remainingSec <= m.profile.Schedule.LookaheadSec
 		}
+		m.syncRemainingFromSchedule()
+		m.coveragePercent = m.computeCoveragePercent()
+		m.inLookahead = m.inCoverage && m.remainingSec <= m.profile.Schedule.LookaheadSec
 		return m, tickCmd()
 
 	case ReplayProgressMsg:
@@ -234,36 +245,89 @@ func (m Model) View() string {
 	return m.renderLayout()
 }
 
-// computeCoveragePercent calculates the progress through the current
-// phase (in-coverage window or out-of-coverage gap) using remainingSec
-// which is kept current by both CoverageMsg and TickMsg.
+// computeCoveragePercent returns progress through the scheduled coverage
+// window (periodic) or cycle (continuous), using cyclePosSec. Blockages
+// do not reset this — the bar keeps walking the schedule while the status
+// line shows OUT OF COVERAGE and remainingSec counts down to recovery.
 func (m Model) computeCoveragePercent() float64 {
-	if m.profile.Schedule.Mode == profile.ModeContinuous {
-		if m.profile.Schedule.PeriodSec == 0 {
-			return 0
-		}
-		elapsed := m.profile.Schedule.PeriodSec - m.remainingSec
-		return elapsed / m.profile.Schedule.PeriodSec * 100
-	}
-	if m.inCoverage {
-		if m.profile.Schedule.WindowSec == 0 {
-			return 0
-		}
-		elapsed := m.profile.Schedule.WindowSec - m.remainingSec
-		if elapsed < 0 {
-			elapsed = 0
-		}
-		return elapsed / m.profile.Schedule.WindowSec * 100
-	}
-	gap := m.profile.Schedule.PeriodSec - m.profile.Schedule.WindowSec
-	if gap == 0 {
+	period := m.profile.Schedule.PeriodSec
+	if period <= 0 {
 		return 0
 	}
-	elapsed := gap - m.remainingSec
-	if elapsed < 0 {
-		elapsed = 0
+	pos := m.cyclePosSec
+	if pos < 0 {
+		pos = 0
 	}
-	return elapsed / gap * 100
+	if pos > period {
+		pos = period
+	}
+
+	if m.profile.Schedule.Mode == profile.ModeContinuous {
+		return pos / period * 100
+	}
+
+	window := m.profile.Schedule.WindowSec
+	if window <= 0 {
+		return 0
+	}
+	if pos < window {
+		return pos / window * 100
+	}
+	gap := period - window
+	if gap <= 0 {
+		return 100
+	}
+	return (pos - window) / gap * 100
+}
+
+// syncRemainingFromSchedule keeps "Xs left" aligned with cyclePosSec for
+// scheduled phases. CoverageMsg only arrives on transitions, so without
+// this a continuous cycle would show "0s left" while the bar keeps moving.
+// Mid-window blockages are the exception: remainingSec is time until the
+// blockage clears, which is not derivable from the schedule alone — those
+// just count down by 1s.
+func (m *Model) syncRemainingFromSchedule() {
+	period := m.profile.Schedule.PeriodSec
+	if period <= 0 {
+		return
+	}
+	pos := m.cyclePosSec
+
+	if m.profile.Schedule.Mode == profile.ModeContinuous {
+		if m.inCoverage {
+			m.remainingSec = period - pos
+			return
+		}
+		// Continuous out-of-coverage is always a blockage: count down.
+		if m.remainingSec > 0 {
+			m.remainingSec -= 1
+			if m.remainingSec < 0 {
+				m.remainingSec = 0
+			}
+		}
+		return
+	}
+
+	window := m.profile.Schedule.WindowSec
+	if m.inCoverage {
+		m.remainingSec = window - pos
+		if m.remainingSec < 0 {
+			m.remainingSec = 0
+		}
+		return
+	}
+	if pos >= window {
+		// Scheduled inter-window gap.
+		m.remainingSec = period - pos
+		return
+	}
+	// Mid-window blockage: keep counting down toward clearance.
+	if m.remainingSec > 0 {
+		m.remainingSec -= 1
+		if m.remainingSec < 0 {
+			m.remainingSec = 0
+		}
+	}
 }
 
 func (m *Model) pushSparkline(s condition.LinkState) {
@@ -313,6 +377,8 @@ func (m *Model) clearMetricsForFocusChange() {
 	m.inCoverage = false
 	m.remainingSec = 0
 	m.elapsedSec = 0
+	m.cyclePosSec = 0
+	m.inBlockage = false
 	m.coveragePercent = 0
 }
 

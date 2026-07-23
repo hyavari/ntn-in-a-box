@@ -42,6 +42,7 @@ func cloneProfile(p profile.Profile) profile.Profile {
 	clone.Curves.JitterMs = append([]profile.Point(nil), p.Curves.JitterMs...)
 	clone.Curves.LossPct = append([]profile.Point(nil), p.Curves.LossPct...)
 	clone.Curves.BandwidthKbps = append([]profile.Point(nil), p.Curves.BandwidthKbps...)
+	clone.Blockages = append([]profile.Blockage(nil), p.Blockages...)
 	return clone
 }
 

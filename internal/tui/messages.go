@@ -13,6 +13,8 @@ type CoverageMsg struct {
 	InCoverage          bool
 	ElapsedSec          float64
 	UntilNextTransition float64
+	CyclePosSec         float64
+	InBlockage          bool
 	At                  time.Time
 }
 

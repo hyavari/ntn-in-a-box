@@ -66,6 +66,12 @@ func (m Model) renderCoverageStatus(_ int) string {
 		}
 		return " " + styleStatusGreen.Render("▲ IN COVERAGE")
 	}
+	if m.inBlockage {
+		if m.focusDeviceID != "" {
+			return " " + styleStatusRed.Render("▼ "+m.focusDeviceID+" BLOCKED")
+		}
+		return " " + styleStatusRed.Render("▼ BLOCKED")
+	}
 	if m.focusDeviceID != "" {
 		return " " + styleStatusRed.Render("▼ "+m.focusDeviceID+" OUT OF COVERAGE")
 	}
@@ -78,8 +84,13 @@ func (m Model) renderProgressBar(width int) string {
 	if m.isReplay {
 		return m.renderReplayProgressBar(width)
 	}
-	// Format: " [████░░░░] 65% · 45s left"
-	suffix := fmt.Sprintf(" %.0f%% · %.0fs left", m.coveragePercent, m.remainingSec)
+	// Format: " [████░░░░] 65% · 45s left" (or "blocked · Ns left")
+	var suffix string
+	if !m.inCoverage && m.inBlockage {
+		suffix = fmt.Sprintf(" %.0f%% · blocked · %.0fs left", m.coveragePercent, m.remainingSec)
+	} else {
+		suffix = fmt.Sprintf(" %.0f%% · %.0fs left", m.coveragePercent, m.remainingSec)
+	}
 	// barWidth = panel width - 1 leading space - 2 brackets - len(suffix)
 	barWidth := width - 1 - 2 - len(suffix)
 	if barWidth < 5 {

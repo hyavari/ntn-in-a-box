@@ -277,6 +277,8 @@ type conditionResponse struct {
 	InCoverage             bool    `json:"in_coverage"`
 	ElapsedSec             float64 `json:"elapsed_sec"`
 	UntilNextTransitionSec float64 `json:"until_next_transition_sec"`
+	CyclePosSec            float64 `json:"cycle_pos_sec"`
+	InBlockage             bool    `json:"in_blockage,omitempty"`
 	DelayMs                float64 `json:"delay_ms,omitempty"`
 	JitterMs               float64 `json:"jitter_ms,omitempty"`
 	LossPct                float64 `json:"loss_pct,omitempty"`
@@ -307,6 +309,8 @@ func (s *Server) handleGetCondition(w http.ResponseWriter, r *http.Request) {
 		InCoverage:             cov.InCoverage,
 		ElapsedSec:             cov.ElapsedSec,
 		UntilNextTransitionSec: finiteSec(cov.UntilNextTransitionSec),
+		CyclePosSec:            cov.CyclePosSec,
+		InBlockage:             cov.InBlockage,
 	}
 	if cov.InCoverage {
 		resp.DelayMs = link.DelayMs

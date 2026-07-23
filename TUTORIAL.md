@@ -65,9 +65,17 @@ Available profiles:
 
 - `leo_pass_90s` — single-satellite LEO pass (Iridium/Swarm-style visibility windows)
 - `geo_steady` — continuous GEO link (always connected, variable quality)
+- `geo_blockage` — continuous GEO with unscheduled blockage (tunnel/terrain; no lookahead)
 - `d2c_burst` — short burst windows (Direct-to-Cell store-and-forward style)
 - `sos_burst` — emergency/SOS short burst (15s window, tiny bandwidth, elevated loss)
 - `sos_hostile` — harsher SOS variant for stress-testing offline queues
+
+Quick demo of surprise drops:
+
+```bash
+./scripts/demo-blockage.sh          # fast cycle + poller + GUI
+./scripts/demo-blockage.sh --tui    # live TUI dashboard
+```
 
 ## Step 3: Test a Node.js app with retry logic
 
@@ -368,7 +376,7 @@ network security config) — the sample already does.
 
 ## Next steps
 
-- Try different profiles (`geo_steady`, `d2c_burst`, `sos_burst`) to see how
+- Try different profiles (`geo_steady`, `geo_blockage`, `d2c_burst`, `sos_burst`) to see how
   your app handles different satellite architectures
 - Follow [Step 11](#step-11-test-with-an-android-emulator) for Android emulator testing
 - Build a custom profile that matches your target constellation

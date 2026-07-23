@@ -70,6 +70,8 @@ func (a *Adapter) OnCoverage(ev eventbus.CoverageEvent) {
 		msg.InCoverage = cov.InCoverage
 		msg.ElapsedSec = cov.ElapsedSec
 		msg.UntilNextTransition = cov.UntilNextTransitionSec
+		msg.CyclePosSec = cov.CyclePosSec
+		msg.InBlockage = cov.InBlockage
 	} else if msg.ElapsedSec == 0 && msg.UntilNextTransition == 0 {
 		// Fallback: derive InCoverage from event kind.
 		msg.InCoverage = ev.Kind == eventbus.KindWindowOpened || ev.Kind == eventbus.KindWindowOpening

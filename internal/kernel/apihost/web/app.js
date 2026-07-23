@@ -9,11 +9,20 @@ const state = {
     inCoverage: false,
     elapsedSec: 0,
     untilNext: 0,
+    // cyclePosSec is schedule-period position. Progress bars use this so
+    // a blockage does not reset or hijack the bar (elapsed_sec is
+    // blockage-relative while blocked).
+    cyclePosSec: 0,
+    inBlockage: false,
     windowSec: 90,
     periodSec: 600,
     lookaheadSec: 30,
     profileName: '',
     mode: 'periodic',
+    // True once session_info reports mode=tle. Dynamic window/period
+    // derivation from coverage events is TLE-only; profile runs (including
+    // continuous+blockage) must keep the YAML schedule intact.
+    isTle: false,
     metrics: { delay: 0, jitter: 0, loss: 0, bandwidth: 0 },
     history: { delay: [], jitter: [], loss: [], bandwidth: [] },
     connected: false,
@@ -163,6 +172,7 @@ function connect() {
     es.addEventListener('session_info', (e) => {
         const info = JSON.parse(e.data);
         sessionInfoReceived = true;
+        state.isTle = info.mode === 'tle';
         // Update UI header with session info.
         if (info.mode === 'tle' && info.satellite_name) {
             els.profileName.textContent = `TLE: ${info.satellite_name}`;
@@ -216,29 +226,50 @@ function connect() {
         }
 
         state.inCoverage = data.in_coverage;
-        if (data.elapsed_sec > 0 || data.until_next_transition > 0) {
+        // Always apply numeric fields when present (including 0). The old
+        // " > 0 " guard skipped cycle wraps and left untilNext stuck at 0.
+        if (typeof data.elapsed_sec === 'number') {
             state.elapsedSec = data.elapsed_sec;
+        }
+        if (typeof data.until_next_transition === 'number') {
             state.untilNext = data.until_next_transition;
         }
+        if (typeof data.cycle_pos_sec === 'number') {
+            state.cyclePosSec = data.cycle_pos_sec;
+        }
+        state.inBlockage = !state.inCoverage && !!data.in_blockage;
         if (data.kind === 'window_opened') {
             state.elapsedSec = data.elapsed_sec || 0;
-            // In TLE mode, derive windowSec from the coverage event
+            if (typeof data.cycle_pos_sec === 'number') {
+                state.cyclePosSec = data.cycle_pos_sec;
+            }
+            if (typeof data.until_next_transition === 'number') {
+                state.untilNext = data.until_next_transition;
+            }
+            // TLE only: derive windowSec from the coverage event
             // (until_next_transition at window open = window duration).
-            if (sessionInfoReceived && data.until_next_transition > 0) {
+            // Must not run for profile mode — blockages also emit
+            // window_opened/closed and would corrupt the YAML schedule.
+            if (state.isTle && data.until_next_transition > 0) {
                 state.windowSec = data.until_next_transition;
                 updateScheduleLabels();
             }
         }
-        if (data.kind === 'initial' && data.in_coverage && sessionInfoReceived) {
-            // Derive windowSec from initial state: elapsed + remaining = total window.
+        // Keep countdown aligned with cycle position while in coverage
+        // (SSE only fires on transitions; local ticks otherwise drift).
+        if (state.inCoverage) {
+            syncUntilNextFromSchedule();
+        }
+        if (data.kind === 'initial' && data.in_coverage && state.isTle) {
+            // TLE: derive windowSec from initial state.
             if (data.until_next_transition > 0) {
                 state.windowSec = (data.elapsed_sec || 0) + data.until_next_transition;
                 updateScheduleLabels();
             }
         }
         if (data.kind === 'window_closed') {
-            // In TLE mode, derive gap duration from coverage event.
-            if (sessionInfoReceived && data.until_next_transition > 0) {
+            // TLE only: derive gap duration from coverage event.
+            if (state.isTle && data.until_next_transition > 0) {
                 state.periodSec = state.windowSec + data.until_next_transition;
                 updateScheduleLabels();
             }
@@ -274,6 +305,7 @@ function connect() {
         state.hasData = true;
         if (!state.inCoverage) {
             state.inCoverage = true;
+            state.inBlockage = false;
             updateCoverageStatus();
             if (activeView) activeView.update(state);
         }
@@ -656,8 +688,13 @@ async function fetchProfile() {
             const sched = p.schedule || p.Schedule || {};
             const mode = sched.mode || sched.Mode || 'periodic';
             const periodSec = sched.period_sec || sched.PeriodSec || 600;
-            const windowSec = sched.window_sec || sched.WindowSec || 90;
-            const lookaheadSec = sched.lookahead_sec || sched.LookaheadSec || 30;
+            // Prefer nullish coalescing so continuous profiles (window_sec: 0)
+            // are not rewritten to the periodic default of 90.
+            const rawWindow = sched.window_sec ?? sched.WindowSec;
+            const windowSec = mode === 'continuous'
+                ? periodSec
+                : (rawWindow || 90);
+            const lookaheadSec = sched.lookahead_sec ?? sched.LookaheadSec ?? 30;
             const profileName = p.name || p.Name || 'unknown';
 
             state.profileName = profileName;
@@ -716,6 +753,9 @@ function updateCoverageStatus() {
     if (state.inCoverage) {
         els.coverageIndicator.textContent = `▲ ${who} IN COVERAGE`;
         els.coverageIndicator.classList.remove('out');
+    } else if (state.inBlockage) {
+        els.coverageIndicator.textContent = `▼ ${who} BLOCKED`;
+        els.coverageIndicator.classList.add('out');
     } else {
         els.coverageIndicator.textContent = `▼ ${who} OUT OF COVERAGE`;
         els.coverageIndicator.classList.add('out');
@@ -743,19 +783,49 @@ function formatMetric(value, unit) {
 }
 
 function updateProgressBar() {
-    if (state.inCoverage) {
-        const pct = Math.min(state.elapsedSec / state.windowSec * 100, 100);
-        els.progressFill.style.width = pct + '%';
-        els.progressFill.classList.remove('out');
-        els.progressInfo.textContent = `${Math.round(pct)}% · ${Math.round(state.elapsedSec)}s / ${state.windowSec}s`;
-    } else {
-        const gap = state.periodSec - state.windowSec;
-        const gapElapsed = gap - state.untilNext;
-        const pct = gap > 0 ? Math.min(gapElapsed / gap * 100, 100) : 0;
-        els.progressFill.style.width = pct + '%';
-        els.progressFill.classList.add('out');
-        els.progressInfo.textContent = `gap ${Math.round(pct)}% · next in ${Math.round(state.untilNext)}s`;
+    // Progress through the scheduled window/cycle using cyclePosSec —
+    // same approach as the TUI. Blockages change inCoverage / untilNext
+    // but must not reset or hijack this bar.
+    const period = state.periodSec;
+    const pos = state.cyclePosSec;
+    let pct = 0;
+    const continuous = isContinuousSchedule();
+
+    if (period > 0) {
+        if (continuous) {
+            pct = Math.min(Math.max(pos / period * 100, 0), 100);
+        } else if (state.windowSec > 0) {
+            if (pos < state.windowSec) {
+                pct = Math.min(Math.max(pos / state.windowSec * 100, 0), 100);
+            } else {
+                const gap = period - state.windowSec;
+                const gapElapsed = pos - state.windowSec;
+                pct = gap > 0 ? Math.min(Math.max(gapElapsed / gap * 100, 0), 100) : 0;
+            }
+        }
     }
+
+    els.progressFill.style.width = pct + '%';
+    if (state.inCoverage) {
+        els.progressFill.classList.remove('out');
+        els.progressInfo.textContent =
+            `${Math.round(pct)}% · ${Math.round(state.untilNext)}s left`;
+    } else if (state.inBlockage) {
+        els.progressFill.classList.add('out');
+        els.progressInfo.textContent =
+            `${Math.round(pct)}% · blocked · ${Math.round(state.untilNext)}s left`;
+    } else {
+        els.progressFill.classList.add('out');
+        els.progressInfo.textContent =
+            `${Math.round(pct)}% · next in ${Math.round(state.untilNext)}s`;
+    }
+}
+
+// isContinuousSchedule matches TUI continuous handling even if profile
+// fetch left mode as the default "periodic" (window covers the period).
+function isContinuousSchedule() {
+    return state.mode === 'continuous' ||
+        (state.periodSec > 0 && state.windowSec >= state.periodSec);
 }
 
 // --- Sparklines ---
@@ -820,16 +890,22 @@ function updateTimeline() {
     addSegment(bar, windowPct, 'coverage');
     addSegment(bar, gapPct, 'gap future');
 
-    // Now cursor position
+    // Now cursor position — always from cyclePosSec so blockages don't
+    // jump the cursor (elapsed_sec is blockage-relative while blocked).
     let cursorPct = 50;
-    if (state.inCoverage) {
-        const windowStart = windowPct + gapPct;
-        cursorPct = windowStart + (state.elapsedSec / state.windowSec) * windowPct;
-    } else {
-        const gapStart = windowPct + gapPct + windowPct;
-        const gap = state.periodSec - state.windowSec;
-        const gapElapsed = gap - state.untilNext;
-        cursorPct = gapStart + (gapElapsed / gap) * gapPct;
+    if (state.windowSec > 0 && state.periodSec > 0) {
+        const pos = state.cyclePosSec;
+        if (pos < state.windowSec) {
+            const windowStart = windowPct + gapPct;
+            cursorPct = windowStart + (pos / state.windowSec) * windowPct;
+        } else {
+            const gap = state.periodSec - state.windowSec;
+            if (gap > 0) {
+                const gapStart = windowPct + gapPct + windowPct;
+                const gapElapsed = pos - state.windowSec;
+                cursorPct = gapStart + (gapElapsed / gap) * gapPct;
+            }
+        }
     }
 
     const cursor = document.createElement('div');
@@ -852,9 +928,13 @@ function addSegment(bar, widthPct, classes) {
 
 setInterval(() => {
     if (!state.hasData || state.replayDone) return;
-    if (state.untilNext > 0) {
-        state.untilNext -= 1;
+    if (state.periodSec > 0) {
+        state.cyclePosSec += 1;
+        if (state.cyclePosSec >= state.periodSec) {
+            state.cyclePosSec -= state.periodSec;
+        }
     }
+    syncUntilNextFromSchedule();
     if (state.inCoverage) {
         state.elapsedSec += 1;
     }
@@ -863,6 +943,36 @@ setInterval(() => {
     updateProgressBar();
     updateTimeline();
 }, 1000);
+
+// syncUntilNextFromSchedule mirrors the TUI: keep the countdown aligned
+// with cycle position for scheduled phases. Mid-window / continuous
+// blockages count down toward clearance instead.
+function syncUntilNextFromSchedule() {
+    const period = state.periodSec;
+    if (!(period > 0)) return;
+    const pos = state.cyclePosSec;
+    const continuous = isContinuousSchedule();
+
+    if (continuous) {
+        if (state.inCoverage) {
+            state.untilNext = Math.max(period - pos, 0);
+            return;
+        }
+        if (state.untilNext > 0) state.untilNext -= 1;
+        return;
+    }
+
+    const window = state.windowSec;
+    if (state.inCoverage) {
+        state.untilNext = Math.max(window - pos, 0);
+        return;
+    }
+    if (pos >= window) {
+        state.untilNext = Math.max(period - pos, 0);
+        return;
+    }
+    if (state.untilNext > 0) state.untilNext -= 1;
+}
 
 // --- Connection badge ---
 

@@ -85,6 +85,8 @@ func Run(ctx context.Context, cfg Config) error {
 				InCoverage:          cov.InCoverage,
 				ElapsedSec:          cov.ElapsedSec,
 				UntilNextTransition: cov.UntilNextTransitionSec,
+				CyclePosSec:         cov.CyclePosSec,
+				InBlockage:          cov.InBlockage,
 				At:                  now,
 			})
 		}

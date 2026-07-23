@@ -11,24 +11,39 @@ import (
 // instant, and how that instant relates to the current window
 // (periodic mode) or cycle (continuous mode).
 type CoverageState struct {
-	// InCoverage is true if the device has a link at this instant.
-	// Always true for profile.ModeContinuous.
+	// InCoverage is true if the device has a link at this instant. For
+	// ModeContinuous it is true except during a blockage (an unscheduled
+	// outage; see profile.Blockage).
 	InCoverage bool
 
 	// ElapsedSec is the time elapsed, in seconds, since the current
 	// window opened (periodic, while InCoverage) or since the current
 	// cycle started (continuous). This is the value curve evaluation
-	// uses. While out of coverage (periodic only), it instead reports
-	// time elapsed since the window closed — informational only, since
-	// curves don't apply outside a window.
+	// uses. While out of coverage — a periodic gap, or a blockage in any
+	// mode — it instead reports time elapsed since the link dropped;
+	// informational only, since curves don't apply while out of coverage.
 	ElapsedSec float64
 
 	// UntilNextTransitionSec is the time remaining, in seconds, until
-	// the next coverage transition: window close if InCoverage, window
-	// open if not. For ModeContinuous there is no real transition
-	// (coverage never drops); this instead reports time remaining in
-	// the current curve cycle.
+	// the next coverage transition. While InCoverage this is the time
+	// until the scheduled window closes (periodic) or the current cycle
+	// ends (continuous); an upcoming blockage is deliberately not
+	// reflected here so it stays unforeseeable (blockages have no
+	// lookahead). While out of coverage it is the time until coverage
+	// resumes — the next window opens (periodic gap) or the blockage
+	// clears.
 	UntilNextTransitionSec float64
+
+	// CyclePosSec is the position within the schedule period [0, PeriodSec),
+	// always — including during a blockage. Progress bars use this so a
+	// surprise drop does not reset or hijack the scheduled window/cycle
+	// progress (ElapsedSec is blockage-relative while blocked).
+	CyclePosSec float64
+
+	// InBlockage is true when the link is down because of an unscheduled
+	// blockage overlay (tunnel/terrain), not a scheduled periodic gap.
+	// Only meaningful when InCoverage is false.
+	InBlockage bool
 }
 
 // Coverage computes the CoverageState at instant now.
@@ -49,11 +64,37 @@ func (e *Evaluator) Coverage(now time.Time) CoverageState {
 	period := e.profile.Schedule.PeriodSec
 	cyclePos := positiveMod(elapsed, period)
 
+	base := e.scheduledCoverage(cyclePos, period)
+
+	// Overlay unscheduled blockages. A blockage only matters while the
+	// schedule would otherwise have coverage; during a periodic gap the
+	// link is already down. Deliberately, we do NOT shorten an
+	// in-coverage UntilNextTransitionSec to reveal an upcoming
+	// blockage: a blockage is a surprise drop (see profile.Blockage), so
+	// consumers reading lookahead must not be able to foresee it.
+	if base.InCoverage {
+		if blk, ok := e.activeBlockage(cyclePos); ok {
+			return CoverageState{
+				InCoverage:             false,
+				ElapsedSec:             cyclePos - blk.OffsetSec,
+				UntilNextTransitionSec: (blk.OffsetSec + blk.DurationSec) - cyclePos,
+				CyclePosSec:            cyclePos,
+				InBlockage:             true,
+			}
+		}
+	}
+	return base
+}
+
+// scheduledCoverage computes coverage from the schedule alone (periodic
+// window or continuous), before any blockage overlay.
+func (e *Evaluator) scheduledCoverage(cyclePos, period float64) CoverageState {
 	if e.profile.Schedule.Mode == profile.ModeContinuous {
 		return CoverageState{
 			InCoverage:             true,
 			ElapsedSec:             cyclePos,
 			UntilNextTransitionSec: period - cyclePos,
+			CyclePosSec:            cyclePos,
 		}
 	}
 
@@ -63,13 +104,27 @@ func (e *Evaluator) Coverage(now time.Time) CoverageState {
 			InCoverage:             true,
 			ElapsedSec:             cyclePos,
 			UntilNextTransitionSec: window - cyclePos,
+			CyclePosSec:            cyclePos,
 		}
 	}
 	return CoverageState{
 		InCoverage:             false,
 		ElapsedSec:             cyclePos - window,
 		UntilNextTransitionSec: period - cyclePos,
+		CyclePosSec:            cyclePos,
 	}
+}
+
+// activeBlockage returns the blockage covering cyclePos (on the half-open
+// interval [OffsetSec, OffsetSec+DurationSec)), if any. Blockages are
+// validated to be ascending and non-overlapping, so at most one matches.
+func (e *Evaluator) activeBlockage(cyclePos float64) (profile.Blockage, bool) {
+	for _, b := range e.profile.Blockages {
+		if cyclePos >= b.OffsetSec && cyclePos < b.OffsetSec+b.DurationSec {
+			return b, true
+		}
+	}
+	return profile.Blockage{}, false
 }
 
 // positiveMod returns a mod m in [0, m), matching mathematical modulo

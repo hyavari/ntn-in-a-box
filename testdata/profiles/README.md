@@ -14,6 +14,29 @@ alongside the loader in `internal/kernel/profile`.
   tiny bandwidth, elevated loss). Good default for queue-across-gap demos.
 - `sos_hostile.yaml` — harsher SOS variant (10s window, higher loss).
   Stress-tests offline queues and deadline-aware send.
+- `geo_blockage.yaml` — always-in-coverage GEO link with intermittent,
+  *unscheduled* blockage (tunnel / terrain / tree cover). Models the
+  automotive case: coverage never drops for orbital reasons, but a moving
+  vehicle still loses the link — and with no lookahead, so apps must
+  recover reactively. Stress-tests reconnect/backoff against surprise
+  drops rather than scheduled passes.
+
+## Blockages
+
+Any profile may include a `blockages` list: repeating, unscheduled
+outages layered on top of the schedule (see `Blockage` in
+`internal/kernel/profile`). Each blockage is an `{offset_sec,
+duration_sec}` interval within one `period_sec` cycle; it repeats every
+cycle and is active on the half-open interval
+`[offset_sec, offset_sec + duration_sec)`. Blockages must fit within the
+cycle (no wrap) and be strictly ascending and non-overlapping.
+
+Unlike a periodic window close, a blockage carries **no lookahead** — set
+`lookahead_sec: 0` — because a real vehicle cannot predict a tunnel from
+orbital mechanics. They are primarily intended for continuous profiles
+but are permitted on any mode (on a periodic profile they only bite while
+a window would otherwise be open). Blockage timings are illustrative
+engineering values, not measurements of any specific route.
 
 ## Sourcing
 

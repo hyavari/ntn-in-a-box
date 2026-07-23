@@ -200,6 +200,61 @@ func TestValidate_MultiPointCurveMustReachBoundary(t *testing.T) {
 	}
 }
 
+func TestValidate_ValidBlockages(t *testing.T) {
+	// Ascending, non-overlapping blockages that fit within the cycle,
+	// on a continuous profile, are valid.
+	p := Profile{
+		Name: "test",
+		Schedule: Schedule{
+			Mode:      ModeContinuous,
+			PeriodSec: 300,
+		},
+		Curves: Curves{
+			DelayMs:       []Point{{0, 600}},
+			JitterMs:      []Point{{0, 15}},
+			LossPct:       []Point{{0, 0.5}},
+			BandwidthKbps: []Point{{0, 20000}},
+		},
+		Blockages: []Blockage{
+			{OffsetSec: 60, DurationSec: 8},
+			{OffsetSec: 180, DurationSec: 20},
+		},
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("expected valid blockages to pass, got: %v", err)
+	}
+}
+
+func TestValidate_RejectsInvalidBlockages(t *testing.T) {
+	tests := []struct {
+		name   string
+		blocks []Blockage
+	}{
+		{"negative offset", []Blockage{{OffsetSec: -1, DurationSec: 5}}},
+		{"zero duration", []Blockage{{OffsetSec: 10, DurationSec: 0}}},
+		{"negative duration", []Blockage{{OffsetSec: 10, DurationSec: -5}}},
+		{"NaN offset", []Blockage{{OffsetSec: math.NaN(), DurationSec: 5}}},
+		{"NaN duration", []Blockage{{OffsetSec: 10, DurationSec: math.NaN()}}},
+		{"wraps past period_sec", []Blockage{{OffsetSec: 290, DurationSec: 20}}}, // period 300
+		{"overlapping", []Blockage{{OffsetSec: 60, DurationSec: 30}, {OffsetSec: 80, DurationSec: 10}}},
+		{"not ascending", []Blockage{{OffsetSec: 180, DurationSec: 10}, {OffsetSec: 60, DurationSec: 10}}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := Profile{
+				Name:      "test",
+				Schedule:  Schedule{Mode: ModeContinuous, PeriodSec: 300},
+				Curves:    Curves{DelayMs: []Point{{0, 1}}, JitterMs: []Point{{0, 1}}, LossPct: []Point{{0, 1}}, BandwidthKbps: []Point{{0, 1}}},
+				Blockages: tt.blocks,
+			}
+			if err := p.Validate(); err == nil {
+				t.Fatalf("expected an error for case %q, got nil", tt.name)
+			}
+		})
+	}
+}
+
 func TestValidate_AggregatesMultipleErrors(t *testing.T) {
 	// Two independent problems in the same profile: both should show
 	// up in the returned error, proving errors.Join aggregates rather

@@ -31,7 +31,50 @@ func (p *Profile) Validate() error {
 	errs = append(errs, validateCurve("loss_pct", p.Curves.LossPct, validRange, true)...)
 	errs = append(errs, validateCurve("bandwidth_kbps", p.Curves.BandwidthKbps, validRange, false)...)
 
+	errs = append(errs, p.validateBlockages()...)
+
 	return errors.Join(errs...)
+}
+
+// validateBlockages checks that blockage intervals are well-formed: each
+// has a non-negative offset and positive duration, fits entirely within
+// one schedule cycle (no wrap past period_sec), and that the set is
+// strictly ascending and non-overlapping. Blockages repeat every cycle,
+// so an interval that ran past period_sec would have ambiguous meaning.
+func (p *Profile) validateBlockages() []error {
+	var errs []error
+
+	period := p.Schedule.PeriodSec
+	var prevEnd float64
+	for i, b := range p.Blockages {
+		if math.IsNaN(b.OffsetSec) || math.IsNaN(b.DurationSec) {
+			errs = append(errs, fmt.Errorf("blockages[%d]: offset_sec and duration_sec must not be NaN", i))
+			continue // further comparisons against NaN are meaningless
+		}
+		if b.OffsetSec < 0 {
+			errs = append(errs, fmt.Errorf("blockages[%d]: offset_sec must be >= 0, got %.2f", i, b.OffsetSec))
+		}
+		if b.DurationSec <= 0 {
+			errs = append(errs, fmt.Errorf("blockages[%d]: duration_sec must be > 0, got %.2f", i, b.DurationSec))
+		}
+		// Only range/ordering-check once the interval itself is sane and
+		// the period is known-valid (period<=0 is already reported).
+		if b.OffsetSec >= 0 && b.DurationSec > 0 {
+			if period > 0 && b.OffsetSec+b.DurationSec > period {
+				errs = append(errs, fmt.Errorf(
+					"blockages[%d]: offset_sec + duration_sec (%.2f) must be <= schedule.period_sec (%.2f) — a blockage cannot wrap past the cycle end",
+					i, b.OffsetSec+b.DurationSec, period))
+			}
+			if i > 0 && b.OffsetSec < prevEnd {
+				errs = append(errs, fmt.Errorf(
+					"blockages[%d]: offset_sec %.2f overlaps the previous blockage (ends at %.2f) — blockages must be strictly ascending and non-overlapping",
+					i, b.OffsetSec, prevEnd))
+			}
+			prevEnd = b.OffsetSec + b.DurationSec
+		}
+	}
+
+	return errs
 }
 
 func (p *Profile) validateSchedule() []error {
