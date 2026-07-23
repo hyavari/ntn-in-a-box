@@ -1,5 +1,15 @@
 # NTN-in-a-Box
 
+[![Release](https://img.shields.io/github/v/release/hyavari/ntn-in-a-box)](https://github.com/hyavari/ntn-in-a-box/releases)
+[![License](https://img.shields.io/github/license/hyavari/ntn-in-a-box)](LICENSE)
+[![Go](https://img.shields.io/github/go-mod/go-version/hyavari/ntn-in-a-box)](go.mod)
+[![GHCR](https://img.shields.io/badge/ghcr.io-hyavari%2Fntn--in--a--box-blue)](https://github.com/hyavari/ntn-in-a-box/pkgs/container/ntn-in-a-box)
+
+Shape any path like a satellite pass — LEO windows, GEO blockages, real
+`tc`/`netem`.
+
+<img src="guides/images/tle.png" alt="TLE globe visualization — satellite orbit, observer, and coverage beam" width="800">
+
 A self-hostable, open-source platform that makes any network path behave
 like a Non-Terrestrial Network (NTN) — and exposes the satellite
 capabilities (coverage windows, store-and-forward messaging, reachability)
@@ -79,281 +89,43 @@ Requires Docker Desktop installed and running. Bare command names
 (`curl`, `poller`) resolve from the container's PATH; local binaries
 (prefixed with `./`) are bind-mounted into the container automatically.
 
-### Demo script
-
-A convenience script that builds everything, runs a demo, and cleans up:
+### Demo, TUI, and GUI
 
 ```bash
-./scripts/demo.sh                              # default: LEO pass + poller
-./scripts/demo.sh --tui                        # with live TUI dashboard
-./scripts/demo.sh --sample curl-demo           # curl polling demo
-./scripts/demo.sh --sample go-messenger        # Go messenger with queue/flush
-./scripts/demo.sh --tui --sample go-messenger  # TUI + sample
-./scripts/demo.sh --record session.jsonl       # record bus events to file
-./scripts/demo.sh --replay session.jsonl       # replay a recorded session
-./scripts/demo.sh --tui --replay session.jsonl # replay with TUI dashboard
-./scripts/demo.sh geo_steady                   # different profile
-./scripts/demo.sh d2c_burst curl https://example.com  # custom command
-./scripts/demo.sh sos_burst                    # emergency/SOS short burst
-PRUNE=1 ./scripts/demo.sh                     # also remove docker image on exit
+./scripts/demo.sh --tui    # builds, runs LEO + poller, opens GUI at :8080/ui
 ```
 
-The GUI is always available at `http://localhost:8080/ui` when using
-the demo script.
+More demos (record/replay, samples, SOS profiles): [Getting started](guides/getting-started.md).
+Continuous GEO with surprise tunnel drops: `./scripts/demo-blockage.sh`
+([Profiles](guides/profiles.md)).
 
-### TLE Support (real satellite orbits)
+<img src="guides/images/tui.png" alt="TUI Dashboard" width="800">
 
-<img src="docs/images/tle.png" alt="TLE Globe Visualization" width="800">
+<img src="guides/images/gui.png" alt="GUI Visualization" width="800">
 
-Generate profiles from Two-Line Element orbital data, or drive a live
-simulation from predicted passes. In TLE mode, the GUI shows a 3D
-globe with the satellite orbiting in real-time, the observer pinned
-on the surface, and a coverage beam connecting them during passes.
-On macOS, `--tle` is bind-mounted the same way as `--profile`.
+### TLE (real satellite orbits)
 
 ```bash
-# Offline: generate a YAML profile from ISS orbital data
-./ntnbox tle generate \
-  --file testdata/tle/iss.tle \
-  --lat 37.7749 --lon -122.4194 \
-  --output iss-pass.yaml
-
-# Live: predict passes and simulate them in sequence
 sudo ./ntnbox run \
   --tle testdata/tle/iss.tle \
   --lat 37.7749 --lon -122.4194 \
   --start-at next-pass --speed 10 \
   -- ./poller
-
-# Works with --tui, --record, and --addr (GUI)
-sudo ./ntnbox run --tui --addr :8080 \
-  --tle testdata/tle/iss.tle \
-  --lat 37.7749 --lon -122.4194 \
-  --start-at next-pass \
-  -- ./poller
 ```
 
-See [TLE reference](#tle-reference) for flags, custom link models, and
-`./scripts/demo-tle.sh`.
-
-### TUI Dashboard
-
-<img src="docs/images/tui.png" alt="TUI Dashboard" width="800">
-
-Add `--tui` to get a live terminal dashboard instead of scrolling logs:
-
-```bash
-sudo ./ntnbox run --tui --profile testdata/profiles/leo_pass_90s.yaml -- ./poller
-```
-
-The dashboard shows:
-- **Left panel:** coverage status (▲/▼), colored progress bar, link
-  metrics with sparklines, profile info
-- **Right panel:** scrollable output from the wrapped command, with
-  coverage transition markers injected inline
-
-Keyboard controls:
-- `q` / `Ctrl+C` — quit
-- `↑`/`↓`/`PgUp`/`PgDn` — scroll output
-- `f` — toggle follow mode (auto-scroll)
-- `Tab` — toggle expanded output view
-- `r` — replay again (shown after replay completes)
-
-The TUI auto-degrades to a stacked layout on terminals narrower than
-100 columns. Without `--tui`, output behaves exactly as before
-(scrolling logs, suitable for CI/piping).
-
-### GUI Visualization
-
-<img src="docs/images/gui.png" alt="GUI Visualization" width="800">
-
-When running with `--addr`, a web-based GUI is available that shows a
-live satellite pass animation:
-
-```bash
-sudo ./ntnbox run --addr :8080 --profile testdata/profiles/leo_pass_90s.yaml -- ./poller
-
-# Open in browser:
-# http://localhost:8080/ui
-```
-
-The GUI shows:
-- **Left panel:** animated satellite moving along an orbit arc, coverage
-  beam connecting to a ground device, sky darkening on coverage loss
-- **Right panel:** live link metrics with sparklines, coverage timeline,
-  window progress bar, and profile details (name, mode, schedule)
-
-Features:
-- Real-time updates via Server-Sent Events (no polling)
-- Idle overlay when no session is active
-- Responsive: stacks on narrow screens, hides animation on very narrow
-- Works alongside `--tui` — open the GUI in a browser while TUI runs
-  in the terminal
-
-The GUI is embedded in the binary — no separate server or files needed.
+Flags, link models, and `demo-tle.sh`: [TLE guide](guides/tle.md).
 
 ### Query the kernel API (any platform)
 
 ```bash
-# Auto-registers sandbox-0 + condition/lookahead/events (no netns shaping)
-# Default listen: 127.0.0.1:8080 (use --addr 0.0.0.0:8080 for LAN)
 ./ntnbox serve --profile testdata/profiles/leo_pass_90s.yaml
-
 curl http://localhost:8080/devices/sandbox-0/condition
-curl http://localhost:8080/devices/sandbox-0/lookahead
-curl http://localhost:8080/devices/sandbox-0/capabilities
-
-# Legacy: API only — register devices yourself
-./ntnbox serve --no-device --profile testdata/profiles/leo_pass_90s.yaml
-curl -X POST http://localhost:8080/devices \
-  -H "Content-Type: application/json" \
-  -d '{"id":"ue-1","type":"virtual_ue","profile_name":"leo_pass_90s"}'
 ```
 
-Adaptation patterns (queue flush, burst gates, lead_sec, store-and-forward): [COOKBOOK.md](COOKBOOK.md).
+Full endpoints and `serve` modes: [API reference](guides/api.md).
+Adaptation patterns: [COOKBOOK.md](COOKBOOK.md).
 
-## TLE reference
-
-Flags, link models, and the TLE demo script. For a short walkthrough, see
-[TLE Support](#tle-support-real-satellite-orbits) in Quick start.
-
-### `ntnbox tle generate`
-
-| Flag | Required | Default | Description |
-|------|----------|---------|-------------|
-| `--file` | Yes | — | Path to TLE file |
-| `--lat` | Yes | — | Observer latitude (degrees, north +) |
-| `--lon` | Yes | — | Observer longitude (degrees, east +) |
-| `--alt` | No | 0 | Observer altitude (km) |
-| `--output` | Yes | — | Output YAML file or directory |
-| `--passes` | No | 1 | Number of passes to generate |
-| `--link-model` | No | built-in | Custom link model YAML |
-| `--elev-min` | No | 10 | Minimum elevation (degrees) |
-| `--sat` | No | first | Select satellite by name or NORAD ID |
-| `--start` | No | now | Prediction start time (RFC3339) |
-
-```bash
-# Multiple passes → writes pass_001.yaml, pass_002.yaml, … into a directory
-./ntnbox tle generate \
-  --file testdata/tle/iss.tle \
-  --lat 37.7749 --lon -122.4194 \
-  --passes 5 --output passes/
-```
-
-### `ntnbox run --tle`
-
-| Flag | Required | Default | Description |
-|------|----------|---------|-------------|
-| `--tle` | Yes* | — | Path to TLE file (mutually exclusive with `--profile`) |
-| `--lat` | Yes | — | Observer latitude |
-| `--lon` | Yes | — | Observer longitude |
-| `--alt` | No | 0 | Observer altitude (km) |
-| `--link-model` | No | built-in | Custom link model YAML |
-| `--elev-min` | No | 10 | Minimum elevation (degrees) |
-| `--sat` | No | first | Satellite selector |
-| `--start-at` | No | `next-pass` | `next-pass` (≈30s before next rise) or RFC3339 |
-| `--speed` | No | 1.0 | Gap time acceleration factor |
-| `--passes` | No | 10 | Passes to pre-compute |
-
-*`--tle` and `--profile` are mutually exclusive; one is required.
-
-### Custom link models
-
-The default link model maps elevation angle to impairment values based
-on published LEO broadband measurements. Override it with a YAML file:
-
-```yaml
-name: my_constellation
-min_elev_deg: 5
-delay_ms:
-  - { elev_deg: 5, value: 200 }
-  - { elev_deg: 45, value: 30 }
-  - { elev_deg: 90, value: 20 }
-jitter_ms:
-  - { elev_deg: 5, value: 50 }
-  - { elev_deg: 45, value: 8 }
-  - { elev_deg: 90, value: 3 }
-loss_pct:
-  - { elev_deg: 5, value: 15 }
-  - { elev_deg: 45, value: 0.5 }
-  - { elev_deg: 90, value: 0.1 }
-bandwidth_kbps:
-  - { elev_deg: 5, value: 1000 }
-  - { elev_deg: 45, value: 50000 }
-  - { elev_deg: 90, value: 100000 }
-```
-
-### TLE demo script
-
-```bash
-./scripts/demo-tle.sh                          # ISS from San Francisco
-./scripts/demo-tle.sh --generate-only          # just generate profiles
-./scripts/demo-tle.sh --tui --speed 10         # TUI + gap acceleration
-./scripts/demo-tle.sh --lat 51.5074 --lon -0.1278  # London observer
-./scripts/demo-tle.sh --tle testdata/tle/starlink-single.tle  # Starlink
-```
-
-> **Note:** The TLE globe visualization loads Three.js and an Earth
-> texture from jsDelivr CDN. If the network is unavailable, the GUI
-> falls back to the flat sky-arc animation automatically.
-
-## Sample applications
-
-Ready-to-run examples in multiple languages showing how apps behave
-under NTN conditions:
-
-| Sample | Language | Pattern |
-|--------|----------|---------|
-| `samples/curl-demo.sh` | Shell | Simple polling — see latency and timeouts |
-| `samples/node-retry/` | Node.js | Exponential backoff + offline queue |
-| `samples/python-adaptive/` | Python | Latency-based state detection + store-and-forward |
-| `samples/go-messenger/` | Go | Client/server messaging with queue flush |
-| `samples/android-connectivity/` | Android | Retry + offline queue (emulator / Mobile DX) |
-
-```bash
-# Via demo script (builds Docker, easiest on macOS):
-./scripts/demo.sh --sample curl-demo
-./scripts/demo.sh --sample go-messenger
-
-# Direct (Linux native):
-ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- ./samples/curl-demo.sh
-ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- node samples/node-retry/index.js
-ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- python3 samples/python-adaptive/client.py
-
-# Android Mobile DX helper (prints commands; see Tutorial Step 11):
-./scripts/demo-android.sh sos_burst
-```
-
-Published images (linux/amd64 + linux/arm64) live at
-[`ghcr.io/hyavari/ntn-in-a-box`](https://github.com/hyavari/ntn-in-a-box/pkgs/container/ntn-in-a-box)
-(`:latest` and `:vX.Y.Z` on each release). The package is **public** — anonymous
-`docker pull` works without `docker login`. The image includes ntnbox, poller,
-curl, and **Node.js 24 + pnpm** so macOS developers can run JS/TS apps under
-`ntnbox run` (host Darwin Node binaries cannot execute inside the Linux
-container). The Darwin proxy bind-mounts referenced project paths and overlays
-a Linux `node_modules` volume for JS projects. Python samples still need a
-Linux host runtime today. Shell and Go samples work on macOS via the Docker
-proxy (cross-compiled / bind-mounted automatically).
-
-Release binaries (no Docker): `ntnbox-linux-amd64`, `ntnbox-linux-arm64`,
-and `ntnbox-darwin-arm64` on the
-[GitHub Releases](https://github.com/hyavari/ntn-in-a-box/releases) page.
-
-
-No code changes needed in your app — ntnbox shapes the network
-transparently at the OS level. See [TUTORIAL.md](TUTORIAL.md) for a
-step-by-step walkthrough.
-
-### Mobile / Android
-
-For emulator workflows, see [TUTORIAL.md — Step 11](TUTORIAL.md#step-11-test-with-an-android-emulator),
-`./scripts/demo-android.sh`, `samples/android-connectivity/`, and
-[`android/ntnbox/`](android/ntnbox/). Full emulator shaping needs Linux, WSL2,
-or CI (macOS Docker does not shape a host AVD).
-
-## GitHub Action
-
-Run your CI tests under simulated NTN conditions with a single step:
+### GitHub Action
 
 ```yaml
 - uses: hyavari/ntn-in-a-box@v1
@@ -362,246 +134,19 @@ Run your CI tests under simulated NTN conditions with a single step:
     command: npm test
 ```
 
-Requires `ubuntu-latest` (or any Linux runner with `sudo` and `ip`).
-The action builds `ntnbox` from source (needs Go) unless you set
-`ntnbox-version` to a release tag — then it downloads the matching
-linux/amd64 or linux/arm64 binary (checksum verified). Your job's
-toolchain (Node, Go, Python, etc.) is available to the command since it
-runs directly on the host.
+Inputs, replay/record examples: [Getting started](guides/getting-started.md#github-action).
 
-### Inputs
+## Documentation
 
-| Input | Required | Default | Description |
-|-------|----------|---------|-------------|
-| `profile` | Yes* | — | Profile name (`leo_pass_90s`, `geo_steady`, `d2c_burst`, `sos_burst`, `sos_hostile`, `geo_blockage`) or path to YAML |
-| `command` | Yes | — | Command to run under NTN conditions |
-| `replay` | No* | — | Path to a JSONL recording (overrides `profile`) |
-| `speed` | No | `1` | Replay speed multiplier |
-| `record` | No | — | Path to save a recording of this session |
-| `ntnbox-version` | No | — | GitHub release tag to download (arch-specific asset); if unset, build from source |
-
-*Either `profile` or `replay` is required.
-
-### Examples
-
-```yaml
-jobs:
-  ntn-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-      - run: npm ci
-
-      # Run tests under a simulated LEO pass:
-      - uses: hyavari/ntn-in-a-box@v1
-        with:
-          profile: leo_pass_90s
-          command: npm test
-
-      # Replay a recorded session at 10x speed:
-      - uses: hyavari/ntn-in-a-box@v1
-        with:
-          replay: testdata/sessions/regression.jsonl
-          speed: '10'
-          command: npm test
-
-      # Record a session for later replay:
-      - uses: hyavari/ntn-in-a-box@v1
-        with:
-          profile: d2c_burst
-          record: testdata/sessions/new.jsonl
-          command: ./my-app --smoke-test
-```
-
-The action exit code matches the wrapped command — your CI sees test
-pass/fail directly.
-
-## Architecture
-
-One platform, three capabilities, on a shared kernel:
-
-```
-Dev Sandbox          Messaging/SOS         Service API (CAMARA-aligned)
-CLI · virtual UE       store-and-forward     REST endpoints
-        \                    |                    /
-         \                   |                   /
-          --------- module contract (5 hooks) ---
-                             |
-              Platform Kernel (build once)
-   Condition Engine · Device registry · IMS Adapter
-   Event bus · Driver loop · API host
-```
-
-### Kernel components
-
-| Package | Responsibility |
-|---|---|
-| `profile` | Parses and validates YAML pass-shape profiles (schedule + piecewise-linear impairment curves) |
-| `condition` | Given a profile + epoch, computes coverage state and interpolated link impairments at any instant |
-| `driver` | Ticks every 250ms, evaluates the Condition Engine, publishes coverage events and link state to the bus |
-| `eventbus` | In-process pub/sub with throttled link-state (>5% delta or 250ms heartbeat) and unthrottled coverage events |
-| `device` | In-memory registry of virtual UEs and real-phone stubs, each associated with a profile |
-| `imsadapter` | Pluggable message delivery backend (mock with failure injection; real IMS later) |
-| `apihost` | HTTP server: health, profiles, devices, condition state, echo |
-
-### Dev Sandbox module
-
-| Component | Responsibility |
-|---|---|
-| `devsandbox` | Module implementing the 5-hook contract; receives events, drives the netem shim |
-| `netem` | Translates link-state values into `tc qdisc change` commands inside a network namespace |
-| `netns` | Creates/destroys Linux network namespaces with veth pairs and NAT routing |
-
-### Data flow
-
-```
-profile.yaml → profile.LoadFile() → Profile (static)
-                                        │
-                      condition.NewEvaluator(profile, epoch)
-                                        │
-                                        ▼
-                                    Evaluator ─── condition.Eval interface
-                                        │
-               driver.Loop ticks 250ms, calls Evaluate(now)
-                                        │
-                         ┌──────────────┴──────────────┐
-                         ▼                              ▼
-              CoverageEvent                      LinkState
-           (transitions + lookahead)         (while in coverage)
-                         │                              │
-                         ▼                              ▼
-                    eventbus.Bus ──────────────────────────
-                         │
-            ┌────────────┼────────────┐
-            ▼            ▼            ▼
-      Dev Sandbox    Messaging    Service API
-      (netem/tc)     (shipped)     (future)
-```
-
-#### TLE path (alternative to profile.yaml)
-
-```
-satellite.tle + observer location + link model
-        │
-        ▼
-  tle.PredictPasses() → []Pass (SGP4 propagation)
-        │
-        ▼
-  tle.GenerateProfile() → []profile.Profile (one per pass)
-        │
-        ▼
-  tle.SequenceEvaluator ─── condition.Eval interface
-        │                    (same interface as Evaluator)
-        ▼
-  driver.Loop (unchanged) → eventbus → modules
-```
-
-The `SequenceEvaluator` satisfies `condition.Eval` and implements
-`condition.Advancer` for variable-rate time (1x during passes, Nx
-during gaps). The driver calls `Advance(wallNow)` each tick; all
-other consumers (SSE, TUI, recorder) call `Evaluate()` as a pure read.
-
-### Module contract
-
-Every capability module plugs into the kernel through 5 hooks:
-
-1. `RegisterRoutes(host)` — add HTTP endpoints
-2. `OnCoverageEvent(event)` — react to coverage transitions + lookahead
-3. `OnLinkState(state)` — react to link impairment changes
-4. `DeliverVia(adapter)` — optionally deliver messages via IMS backend
-5. `Emit(emitter)` — push observability events
-
-### Pass-shape profiles
-
-Profiles define how a satellite pass looks at the service layer:
-
-```yaml
-name: leo_pass_90s
-schedule:
-  mode: periodic          # periodic (LEO) or continuous (GEO)
-  period_sec: 600         # full cycle length
-  window_sec: 90          # coverage window duration
-  lookahead_sec: 30       # advance notice before transitions
-curves:
-  delay_ms:
-    - { offset_sec: 0, value: 150 }    # horizon (high delay)
-    - { offset_sec: 15, value: 40 }    # overhead (low delay)
-    - { offset_sec: 75, value: 40 }
-    - { offset_sec: 90, value: 100 }   # setting
-  # jitter_ms, loss_pct, bandwidth_kbps follow the same shape
-```
-
-#### Blockages (unscheduled outages)
-
-Any profile may add a `blockages` list — repeating, *unscheduled* link
-drops layered on the schedule (a tunnel, a cutting, dense tree cover).
-Unlike a periodic window close, a blockage has **no lookahead**
-(`lookahead_sec: 0`): a moving vehicle cannot predict a tunnel from
-orbital mechanics, so apps must detect the drop reactively via timeouts.
-This models the automotive case where a GEO link is always in view yet
-still drops as the car moves.
-
-```yaml
-name: geo_blockage
-schedule:
-  mode: continuous
-  period_sec: 300
-  lookahead_sec: 0        # surprise drops, no advance notice
-blockages:
-  - { offset_sec: 60, duration_sec: 8 }    # short tunnel
-  - { offset_sec: 180, duration_sec: 20 }  # tree-lined ridge
-# curves: … (as above)
-```
-
-Blockages repeat every `period_sec`, are active on
-`[offset_sec, offset_sec + duration_sec)`, must fit within the cycle, and
-must be strictly ascending and non-overlapping. Primarily for continuous
-profiles, but permitted on any mode.
-
-Try it (macOS or Linux):
-
-```bash
-./scripts/demo-blockage.sh          # fast demo (drops within ~10s) + GUI
-./scripts/demo-blockage.sh --tui    # live TUI dashboard
-./scripts/demo-blockage.sh --real   # the realistic 300s geo_blockage profile
-```
-
-Sample profiles included: `leo_pass_90s`, `geo_steady`, `d2c_burst`,
-`sos_burst`, `sos_hostile`, `geo_blockage`.
-
-### Out-of-coverage behavior
-
-When coverage is lost — a scheduled window close **or** an unscheduled
-blockage — the Dev Sandbox sets 100% packet loss: packets silently drop,
-mimicking real satellite behavior (the signal disappears without sending
-ICMP unreachable or RST). Apps must detect the outage via timeouts.
-The TUI/GUI label **BLOCKED** for blockage drops vs **OUT OF COVERAGE**
-for scheduled gaps.
-outages via timeouts, which is exactly what NTN-aware apps need to handle.
-
-## API reference
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/health` | Liveness check |
-| GET | `/echo` | Returns `{"ts":"..."}` (poller target) |
-| GET | `/profiles` | List loaded profiles |
-| GET | `/profiles/{name}` | Get a profile's full definition |
-| POST | `/devices` | Register a device (`{id, type, profile_name}`) |
-| GET | `/devices` | List registered devices |
-| GET | `/devices/{id}` | Get a device |
-| GET | `/devices/{id}/condition` | Current coverage + link state |
-| GET | `/devices/{id}/lookahead` | Next open/close times, window duration, elev (TLE); `?lead_sec=` advisory |
-| GET | `/devices/{id}/capabilities` | Satellite capability discovery |
-| POST | `/devices/{id}/messages` | Store-and-forward send (`to`: `cloud` or device id) |
-| GET | `/devices/{id}/messages` | Delivered inbox (oldest-first); `cloud` is a synthetic recipient |
-| GET | `/messages/{mid}` | Message lifecycle status |
-| GET | `/sandbox/status` | Current shaping values (Dev Sandbox) |
-| GET | `/events` | SSE: coverage, link-state, message, … |
-| GET | `/ui/` | Web GUI (satellite pass visualization) |
+| Doc | Use when |
+|-----|----------|
+| [Getting started](guides/getting-started.md) | Demos, TUI/GUI detail, samples, Action, Android |
+| [Profiles](guides/profiles.md) | YAML schema, blockages, out-of-coverage |
+| [TLE](guides/tle.md) | Orbital TLE generate/run |
+| [Architecture](guides/architecture.md) | Kernel, modules, data flow |
+| [API](guides/api.md) | HTTP endpoints |
+| [TUTORIAL.md](TUTORIAL.md) | Step-by-step walkthrough |
+| [COOKBOOK.md](COOKBOOK.md) | Queue flush, burst gates, store-and-forward |
 
 ## Development
 

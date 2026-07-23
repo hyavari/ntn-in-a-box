@@ -381,4 +381,4 @@ network security config) — the sample already does.
 - Follow [Step 11](#step-11-test-with-an-android-emulator) for Android emulator testing
 - Build a custom profile that matches your target constellation
 - Use the `--addr` API to build satellite-aware features in your app
-- Check the [API reference](README.md#api-reference) for all endpoints
+- Check the [API reference](guides/api.md) for all endpoints
