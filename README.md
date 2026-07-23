@@ -1,8 +1,8 @@
 # NTN-in-a-Box
 
-[![Release](https://img.shields.io/github/v/release/hyavari/ntn-in-a-box)](https://github.com/hyavari/ntn-in-a-box/releases)
-[![License](https://img.shields.io/github/license/hyavari/ntn-in-a-box)](LICENSE)
-[![Go](https://img.shields.io/github/go-mod/go-version/hyavari/ntn-in-a-box)](go.mod)
+[![Release](https://img.shields.io/badge/release-v0.1.3-blue)](https://github.com/hyavari/ntn-in-a-box/releases/tag/v0.1.3)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](go.mod)
 [![GHCR](https://img.shields.io/badge/ghcr.io-hyavari%2Fntn--in--a--box-blue)](https://github.com/hyavari/ntn-in-a-box/pkgs/container/ntn-in-a-box)
 
 Shape any path like a satellite pass — LEO windows, GEO blockages, real
