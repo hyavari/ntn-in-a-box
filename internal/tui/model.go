@@ -300,7 +300,7 @@ func (m *Model) syncRemainingFromSchedule() {
 		}
 		// Continuous out-of-coverage is always a blockage: count down.
 		if m.remainingSec > 0 {
-			m.remainingSec -= 1
+			m.remainingSec--
 			if m.remainingSec < 0 {
 				m.remainingSec = 0
 			}
@@ -323,7 +323,7 @@ func (m *Model) syncRemainingFromSchedule() {
 	}
 	// Mid-window blockage: keep counting down toward clearance.
 	if m.remainingSec > 0 {
-		m.remainingSec -= 1
+		m.remainingSec--
 		if m.remainingSec < 0 {
 			m.remainingSec = 0
 		}
