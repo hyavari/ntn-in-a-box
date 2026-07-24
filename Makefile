@@ -1,4 +1,4 @@
-.PHONY: build test fmt check-fmt lint vet check docker assert-demo
+.PHONY: build test fmt check-fmt lint vet check docker assert-demo hooks
 
 build:
 	go build ./...
@@ -27,6 +27,12 @@ endif
 
 # Run everything CI would run (non-mutating).
 check: check-fmt vet lint test build
+
+# Point this clone at .githooks/ (pre-commit runs check-fmt + lint).
+hooks:
+	git config core.hooksPath .githooks
+	chmod +x .githooks/pre-commit
+	@echo "git hooks enabled (core.hooksPath=.githooks)"
 
 # Optional messaging smoke (not part of default check).
 assert-demo:

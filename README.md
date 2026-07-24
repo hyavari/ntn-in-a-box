@@ -162,6 +162,7 @@ Inputs, replay/record examples: [Getting started](guides/getting-started.md#gith
 Requires Go 1.26+.
 
 ```
+make hooks   # once per clone: enable .githooks (pre-commit runs check-fmt + lint)
 make build   # go build ./...
 make test    # go test ./...
 make fmt     # gofmt + goimports, applied in place

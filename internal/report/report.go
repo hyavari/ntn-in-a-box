@@ -56,10 +56,13 @@ func WriteJSON(path string, r Report) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
-	return enc.Encode(r)
+	encodeErr := enc.Encode(r)
+	if cerr := f.Close(); encodeErr == nil {
+		encodeErr = cerr
+	}
+	return encodeErr
 }
 
 // SummaryLine is a short stderr-friendly summary.

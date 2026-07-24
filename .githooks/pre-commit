@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Pre-commit: catch the checks that most often fail CI (fmt + lint).
+# Enable once: make hooks
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+# git hooks often miss Go tooling on PATH
+export PATH="$(go env GOPATH)/bin:${PATH:-}"
+make check-fmt lint
