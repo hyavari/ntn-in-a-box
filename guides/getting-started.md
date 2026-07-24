@@ -5,6 +5,8 @@
    `sudo ./ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- ./poller` (Linux).
 3. Open `http://localhost:8080/ui` when using the demo script (or `--addr :8080`).
 4. Try a sample below, or drop the GitHub Action into CI.
+5. Optional: `--report out.json` writes a coverage (+ messaging) summary —
+   see [Field-data report](report.md).
 
 For YAML schedules and blockages, see [Profiles](profiles.md).
 For orbital TLE, see [TLE](tle.md).

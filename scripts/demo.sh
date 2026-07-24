@@ -7,6 +7,7 @@
 #   ./scripts/demo.sh --sample curl-demo           # run curl demo sample
 #   ./scripts/demo.sh --sample go-messenger        # run Go messenger client
 #   ./scripts/demo.sh --record session.jsonl       # record bus events
+#   ./scripts/demo.sh --report out.json            # field-data JSON at session end
 #   ./scripts/demo.sh --replay session.jsonl       # replay a recorded session
 #   ./scripts/demo.sh geo_steady                   # use a different profile
 #   ./scripts/demo.sh --tui --sample go-messenger  # TUI + sample
@@ -32,13 +33,14 @@
 set -euo pipefail
 
 usage() {
-  sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 # Parse flags.
 TUI_FLAG=""
 SAMPLE=""
 RECORD_FILE=""
+REPORT_FILE=""
 REPLAY_FILE=""
 
 while [[ "${1:-}" == --* ]]; do
@@ -68,6 +70,14 @@ while [[ "${1:-}" == --* ]]; do
       RECORD_FILE="$2"
       shift 2
       ;;
+    --report)
+      if [[ -z "${2:-}" || "${2:-}" == --* ]]; then
+        echo "error: --report requires a filename" >&2
+        exit 1
+      fi
+      REPORT_FILE="$2"
+      shift 2
+      ;;
     --replay)
       if [[ -z "${2:-}" || "${2:-}" == --* ]]; then
         echo "error: --replay requires a filename" >&2
@@ -92,6 +102,10 @@ if [[ -n "$RECORD_FILE" && -n "$REPLAY_FILE" ]]; then
   echo "error: --record and --replay cannot be used together" >&2
   exit 1
 fi
+if [[ -n "$REPORT_FILE" && -n "$REPLAY_FILE" ]]; then
+  echo "error: --report is only supported with run (not --replay)" >&2
+  exit 1
+fi
 
 # macOS bash 3.2 + set -u rejects "${empty_array[@]}" — build argv explicitly.
 build_run_argv() {
@@ -104,6 +118,9 @@ build_run_argv() {
   fi
   if [[ -n "$RECORD_FILE" ]]; then
     RUN_ARGV+=(--record "$RECORD_FILE")
+  fi
+  if [[ -n "$REPORT_FILE" ]]; then
+    RUN_ARGV+=(--report "$REPORT_FILE")
   fi
   if [[ -n "$REPLAY_FILE" ]]; then
     RUN_ARGV+=(--file "$REPLAY_FILE")

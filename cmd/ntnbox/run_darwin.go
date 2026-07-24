@@ -140,6 +140,21 @@ func runViaDarwinDocker(args []string) error {
 		dockerArgs = append(dockerArgs, "-v", absRecord+":/tmp/recording.jsonl")
 		containerCmd = append(containerCmd, "--record", "/tmp/recording.jsonl")
 	}
+	if parsed.report != "" {
+		absReport, err := filepath.Abs(parsed.report)
+		if err != nil {
+			return fmt.Errorf("resolving report path: %w", err)
+		}
+		if _, err := os.Stat(absReport); os.IsNotExist(err) {
+			f, err := os.Create(absReport)
+			if err != nil {
+				return fmt.Errorf("creating report file: %w", err)
+			}
+			_ = f.Close()
+		}
+		dockerArgs = append(dockerArgs, "-v", absReport+":/tmp/report.json")
+		containerCmd = append(containerCmd, "--report", "/tmp/report.json")
+	}
 	containerCmd = append(containerCmd, "--")
 	containerCmd = append(containerCmd, cmdArgs...)
 
@@ -183,6 +198,7 @@ type darwinParsed struct {
 	tui         bool
 	addr        string
 	record      string
+	report      string
 	cmdArgs     []string
 	extraArgs   []string // All other flags to pass through (TLE flags, etc.)
 }
@@ -207,6 +223,9 @@ func parseDarwinArgs(args []string) (darwinParsed, error) {
 			p.tui = true
 		case args[i] == "--record" && i+1 < len(args):
 			p.record = args[i+1]
+			i++
+		case args[i] == "--report" && i+1 < len(args):
+			p.report = args[i+1]
 			i++
 		case args[i] == "--addr" && i+1 < len(args):
 			p.addr = args[i+1]

@@ -95,6 +95,14 @@ Requires Docker Desktop installed and running. Bare command names
 ./scripts/demo.sh --tui    # builds, runs LEO + poller, opens GUI at :8080/ui
 ```
 
+Field-data JSON at session end:
+
+```bash
+sudo ./ntnbox run --report out.json --profile testdata/profiles/leo_pass_90s.yaml -- ./poller
+```
+
+Field meanings: [Report](guides/report.md).
+
 More demos (record/replay, samples, SOS profiles): [Getting started](guides/getting-started.md).
 Continuous GEO with surprise tunnel drops: `./scripts/demo-blockage.sh`
 ([Profiles](guides/profiles.md)).
@@ -142,6 +150,7 @@ Inputs, replay/record examples: [Getting started](guides/getting-started.md#gith
 |-----|----------|
 | [Getting started](guides/getting-started.md) | Demos, TUI/GUI detail, samples, Action, Android |
 | [Profiles](guides/profiles.md) | YAML schema, blockages, out-of-coverage |
+| [Report](guides/report.md) | `--report` JSON field-data summary |
 | [TLE](guides/tle.md) | Orbital TLE generate/run |
 | [Architecture](guides/architecture.md) | Kernel, modules, data flow |
 | [API](guides/api.md) | HTTP endpoints |

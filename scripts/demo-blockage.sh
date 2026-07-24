@@ -11,6 +11,7 @@
 # Usage:
 #   ./scripts/demo-blockage.sh              # fast demo profile + poller + GUI
 #   ./scripts/demo-blockage.sh --tui        # with live TUI dashboard
+#   ./scripts/demo-blockage.sh --report out.json  # field-data JSON at session end
 #   ./scripts/demo-blockage.sh --real       # realistic 300s profile (slow: first drop at 60s)
 #   ./scripts/demo-blockage.sh --help
 #
@@ -33,17 +34,26 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 usage() {
-  sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 TUI_FLAG=""
 USE_REAL=""
+REPORT_FILE=""
 
 while [[ "${1:-}" == --* ]]; do
   case "$1" in
     --help|-h) usage; exit 0 ;;
     --tui)  TUI_FLAG="--tui"; shift ;;
     --real) USE_REAL="1"; shift ;;
+    --report)
+      if [[ -z "${2:-}" || "${2:-}" == --* ]]; then
+        echo "error: --report requires a filename" >&2
+        exit 1
+      fi
+      REPORT_FILE="$2"
+      shift 2
+      ;;
     *) echo "error: unknown flag: $1" >&2; usage >&2; exit 1 ;;
   esac
 done
@@ -121,6 +131,7 @@ TARGET_URL="${TARGET_URL:-http://example.com}"
 # macOS bash 3.2 + set -u rejects "${empty_array[@]}" — build argv explicitly.
 RUN_ARGV=(run)
 if [[ -n "$TUI_FLAG" ]]; then RUN_ARGV+=(--tui); fi
+if [[ -n "$REPORT_FILE" ]]; then RUN_ARGV+=(--report "$REPORT_FILE"); fi
 RUN_ARGV+=(--addr "127.0.0.1:8080" --profile "$PROFILE_PATH" -- poller --url "$TARGET_URL" --interval 1s)
 
 cat <<INFO
@@ -131,6 +142,11 @@ cat <<INFO
     watch for: steady 200s, then sudden "timeout" rows during a blockage
                (tunnel / ridge), then recovery — with NO advance warning.
     GUI available at: http://localhost:8080/ui
+INFO
+if [[ -n "$REPORT_FILE" ]]; then
+  echo "    report → $REPORT_FILE (written when you stop the demo)"
+fi
+cat <<INFO
 
 INFO
 

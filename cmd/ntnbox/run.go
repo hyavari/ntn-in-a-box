@@ -22,6 +22,7 @@ import (
 	"github.com/hyavari/ntn-in-a-box/internal/module/devsandbox/netem"
 	"github.com/hyavari/ntn-in-a-box/internal/module/devsandbox/netns"
 	ntnrecorder "github.com/hyavari/ntn-in-a-box/internal/recorder"
+	"github.com/hyavari/ntn-in-a-box/internal/report"
 	"github.com/hyavari/ntn-in-a-box/internal/tle"
 	ntntui "github.com/hyavari/ntn-in-a-box/internal/tui"
 )
@@ -47,6 +48,7 @@ func runRun(args []string) error {
 	addr := fs.String("addr", "", "Optionally expose the API host (host:port); bare :port binds 127.0.0.1")
 	tuiFlag := fs.Bool("tui", false, "Show a live TUI dashboard instead of scrolling output")
 	recordPath := fs.String("record", "", "Record bus events to a JSONL file")
+	reportPath := fs.String("report", "", "Write field-data JSON report on session end")
 	numDevices := fs.Int("devices", 1, "Number of sandbox devices (sandbox-0..); profile mode only")
 	phaseSec := fs.Float64("phase-sec", 0, "Phase offset seconds between device epochs; profile mode only")
 
@@ -260,6 +262,33 @@ func runRun(args []string) error {
 		bus.SubscribeCoverage(rec.OnCoverage)
 		bus.SubscribeLinkState(rec.OnLinkState)
 		fmt.Fprintf(os.Stderr, "ntnbox: recording to %s\n", *recordPath)
+	}
+
+	// Optionally aggregate a field-data report.
+	if *reportPath != "" {
+		primaryID := "sandbox-0"
+		if tb != nil && len(tb.Devices) > 0 {
+			primaryID = tb.Devices[0].ID
+		} else if len(deviceEvals) > 0 {
+			primaryID = deviceEvals[0].id
+		}
+		agg := report.New(report.Config{
+			Bus:      bus,
+			Sampler:  report.EvalSampler{Eval: eval},
+			Profile:  profileName,
+			DeviceID: primaryID,
+			Start:    time.Now().UTC(),
+		})
+		path := *reportPath
+		defer func() {
+			r := agg.Finalize(time.Now().UTC())
+			if err := report.WriteJSON(path, r); err != nil {
+				fmt.Fprintf(os.Stderr, "ntnbox: report write: %v\n", err)
+				return
+			}
+			fmt.Fprintf(os.Stderr, "ntnbox: %s\n", report.SummaryLine(r, path))
+		}()
+		fmt.Fprintf(os.Stderr, "ntnbox: will write report to %s\n", path)
 	}
 
 	// Optionally start the API host.
