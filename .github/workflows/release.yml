@@ -22,17 +22,20 @@ jobs:
       - name: Build multi-arch ntnbox binaries
         run: |
           set -euo pipefail
+          version="${GITHUB_REF_NAME}"
+          ldflags="-s -w -X main.version=${version}"
           build() {
             local goos="$1" goarch="$2" asset="$3"
-            echo "building ${asset} (${goos}/${goarch})"
+            echo "building ${asset} (${goos}/${goarch}) version=${version}"
             CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
-              go build -trimpath -o "$asset" ./cmd/ntnbox/
+              go build -trimpath -ldflags "$ldflags" -o "$asset" ./cmd/ntnbox/
             sha256sum "$asset" > "${asset}.sha256"
           }
           build linux amd64 ntnbox-linux-amd64
           build linux arm64 ntnbox-linux-arm64
           build darwin arm64 ntnbox-darwin-arm64
           ls -la ntnbox-*
+          ./ntnbox-linux-amd64 version
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
@@ -69,6 +72,8 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
           tags: |
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
             ${{ steps.meta.outputs.image }}:latest

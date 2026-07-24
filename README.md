@@ -1,6 +1,6 @@
 # NTN-in-a-Box
 
-[![Release](https://img.shields.io/badge/release-v0.1.3-blue)](https://github.com/hyavari/ntn-in-a-box/releases/tag/v0.1.3)
+[![Release](https://img.shields.io/badge/release-latest-blue)](https://github.com/hyavari/ntn-in-a-box/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](go.mod)
 [![GHCR](https://img.shields.io/badge/ghcr.io-hyavari%2Fntn--in--a--box-blue)](https://github.com/hyavari/ntn-in-a-box/pkgs/container/ntn-in-a-box)
@@ -179,6 +179,17 @@ install them once with:
 ```
 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 go install golang.org/x/tools/cmd/goimports@latest
+```
+
+### Release
+
+Tag and push — that alone publishes GitHub Release binaries, GHCR
+(`:vX.Y.Z` + `:latest`), and embeds the tag in `ntnbox version`. No README
+or smoke-workflow version bumps.
+
+```
+git tag v0.1.4
+git push origin v0.1.4
 ```
 
 ## License

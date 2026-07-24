@@ -21,7 +21,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: ntnbox <command> [flags]\n\nCommands:\n  serve    Start the kernel API server\n  run      Run a command under simulated NTN conditions\n  replay   Replay a recorded session\n  tle      TLE utilities (generate profiles from orbital data)\n  assert   Smoke-test messaging (serve + UE→cloud delivered)")
+		return errors.New("usage: ntnbox <command> [flags]\n\nCommands:\n  serve    Start the kernel API server\n  run      Run a command under simulated NTN conditions\n  replay   Replay a recorded session\n  tle      TLE utilities (generate profiles from orbital data)\n  assert   Smoke-test messaging (serve + UE→cloud delivered)\n  version  Print build version")
 	}
 
 	switch args[0] {
@@ -35,7 +35,10 @@ func run(args []string) error {
 		return runTLE(args[1:])
 	case "assert":
 		return runAssert(args[1:])
+	case "version", "--version", "-V":
+		fmt.Println(version)
+		return nil
 	default:
-		return fmt.Errorf("unknown command: %s\n\nCommands:\n  serve    Start the kernel API server\n  run      Run a command under simulated NTN conditions\n  replay   Replay a recorded session\n  tle      TLE utilities (generate profiles from orbital data)\n  assert   Smoke-test messaging (serve + UE→cloud delivered)", args[0])
+		return fmt.Errorf("unknown command: %s\n\nCommands:\n  serve    Start the kernel API server\n  run      Run a command under simulated NTN conditions\n  replay   Replay a recorded session\n  tle      TLE utilities (generate profiles from orbital data)\n  assert   Smoke-test messaging (serve + UE→cloud delivered)\n  version  Print build version", args[0])
 	}
 }

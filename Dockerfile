@@ -6,12 +6,14 @@
 
 FROM golang:1.26-alpine AS builder
 
+ARG VERSION=dev
+
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 
-RUN CGO_ENABLED=0 go build -o /out/ntnbox ./cmd/ntnbox/
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/ntnbox ./cmd/ntnbox/
 RUN CGO_ENABLED=0 go build -o /out/poller ./cmd/poller/
 
 FROM node:24-alpine AS node
