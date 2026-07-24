@@ -23,7 +23,7 @@ import (
 
 func runServe(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	profilePath := fs.String("profile", "", "Path to a YAML profile file")
+	profilePath := fs.String("profile", "", "Profile YAML path or builtin name (e.g. nbiot_ntn)")
 	tlePath := fs.String("tle", "", "Path to TLE file (mutually exclusive with --profile)")
 	addr := fs.String("addr", "127.0.0.1:8080", "Listen address (host:port); use 0.0.0.0:8080 to expose on LAN")
 	noDevice := fs.Bool("no-device", false, "Do not auto-register sandbox devices (legacy API-only)")
@@ -124,7 +124,7 @@ func runServe(args []string) error {
 		sessInfo = tb.sessionInfo()
 		modeLabel = profileName
 	} else {
-		p, err := profile.LoadFile(*profilePath)
+		p, err := profile.ResolveLoad(*profilePath)
 		if err != nil {
 			return fmt.Errorf("loading profile: %w", err)
 		}

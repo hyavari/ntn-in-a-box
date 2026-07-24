@@ -1,0 +1,25 @@
+name: leo_d2c
+description: >
+  LEO direct-to-cell (D2C) bearer preset: short, opportunistic
+  connectivity bursts to an unmodified phone radio (Starlink Direct to
+  Cell / AST-class). Sibling of d2c_burst with a recognizable 3GPP-NTN
+  / D2C label for demos. Narrowband, messaging-first — not broadband LEO.
+  Window/period timing and most curve values are illustrative; see
+  testdata/profiles/README.md for sourcing notes shared with d2c_burst.
+
+schedule:
+  mode: periodic
+  period_sec: 300
+  window_sec: 20
+  lookahead_sec: 15
+
+curves:
+  delay_ms:
+    - { offset_sec: 0, value: 200 }
+  jitter_ms:
+    - { offset_sec: 0, value: 30 }
+  loss_pct:
+    - { offset_sec: 0, value: 5 }
+  # Per-device narrowband share estimate (same order as d2c_burst).
+  bandwidth_kbps:
+    - { offset_sec: 0, value: 64 }

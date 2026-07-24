@@ -83,3 +83,21 @@ for scheduled gaps.
 
 `leo_pass_90s`, `geo_steady`, `d2c_burst`, `sos_burst`, `sos_hostile`,
 `geo_blockage`.
+
+### Named bearer presets
+
+Recognizable 3GPP-NTN link classes (also embedded in the binary — use the
+short name without a path):
+
+| Short name | Intent |
+|------------|--------|
+| `nbiot_ntn` | NB-IoT NTN narrowband, messaging-class |
+| `lband_geo` | L-band GEO ~600 ms RTT, modest bandwidth |
+| `leo_d2c` | LEO direct-to-cell short bursts |
+
+```bash
+ntnbox run --profile nbiot_ntn -- ./poller
+ntnbox run --profile ./my-custom.yaml -- ./poller   # custom path still works
+```
+
+Full list and sourcing notes: [`testdata/profiles/README.md`](../testdata/profiles/README.md).

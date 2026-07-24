@@ -44,7 +44,7 @@ func runRun(args []string) error {
 
 	// Parse flags up to "--" separator.
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
-	profilePath := fs.String("profile", "", "Path to a YAML profile file")
+	profilePath := fs.String("profile", "", "Profile YAML path or builtin name (e.g. nbiot_ntn)")
 	addr := fs.String("addr", "", "Optionally expose the API host (host:port); bare :port binds 127.0.0.1")
 	tuiFlag := fs.Bool("tui", false, "Show a live TUI dashboard instead of scrolling output")
 	recordPath := fs.String("record", "", "Record bus events to a JSONL file")
@@ -155,7 +155,7 @@ func runRun(args []string) error {
 	} else {
 		// Profile mode (existing behavior).
 		var err error
-		p, err = profile.LoadFile(*profilePath)
+		p, err = profile.ResolveLoad(*profilePath)
 		if err != nil {
 			return fmt.Errorf("loading profile: %w", err)
 		}

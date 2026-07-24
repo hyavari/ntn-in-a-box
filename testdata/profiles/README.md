@@ -1,13 +1,29 @@
 Sample pass-shape profiles for tests and manual runs. Schema is defined
 alongside the loader in `internal/kernel/profile`.
 
+The same YAML files are **embedded** in the `ntnbox` binary
+(`internal/kernel/profile/builtins/`). Short names work without a checkout:
+
+```bash
+ntnbox run --profile nbiot_ntn -- ./poller
+ntnbox serve --profile lband_geo
+```
+
+On macOS, `ntnbox run` materializes builtins to a temp file and bind-mounts
+them into Docker, so short names work even if `ntnbox:latest` is older than
+this binary.
+
+A filesystem path (anything containing `/`, or a bare filename that exists
+on disk) still loads that file. Keep `testdata/profiles/` and
+`builtins/` byte-identical (enforced by tests).
+
 ## Profiles
 
 - `leo_pass_90s.yaml` — single-satellite LEO pass (rise, overhead, set,
   then a real out-of-coverage gap), e.g. Iridium/Swarm-style
   store-and-forward messaging satellites.
 - `geo_steady.yaml` — always-in-coverage GEO link, flat high-latency
-  profile.
+  profile (HTS-scale bandwidth).
 - `d2c_burst.yaml` — Direct-to-Cell: narrowband, opportunistic bursts to
   an unmodified phone (Starlink Direct to Cell, AST SpaceMobile).
 - `sos_burst.yaml` — emergency / SOS short burst (15s window, long gap,
@@ -20,6 +36,15 @@ alongside the loader in `internal/kernel/profile`.
   vehicle still loses the link — and with no lookahead, so apps must
   recover reactively. Stress-tests reconnect/backoff against surprise
   drops rather than scheduled passes.
+
+### Named bearer presets (3GPP-NTN link classes)
+
+- `nbiot_ntn.yaml` — NB-IoT NTN-class: continuous, few-kbps, high delay,
+  messaging-first.
+- `lband_geo.yaml` — L-band GEO-class: continuous ~600 ms RTT, modest
+  bandwidth (not HTS `geo_steady`).
+- `leo_d2c.yaml` — LEO direct-to-cell bursts; sibling of `d2c_burst` with
+  a recognizable D2C label.
 
 ## Blockages
 

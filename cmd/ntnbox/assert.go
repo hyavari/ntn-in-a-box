@@ -14,6 +14,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"time"
+
+	"github.com/hyavari/ntn-in-a-box/internal/kernel/profile"
 )
 
 func runAssert(args []string) error {
@@ -33,7 +35,7 @@ func runAssert(args []string) error {
 	if err != nil {
 		return fmt.Errorf("resolving executable: %w", err)
 	}
-	if _, err := os.Stat(*profilePath); err != nil {
+	if _, err := profile.ResolveLoad(*profilePath); err != nil {
 		return fmt.Errorf("profile %s: %w", *profilePath, err)
 	}
 

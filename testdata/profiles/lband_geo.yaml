@@ -1,0 +1,25 @@
+name: lband_geo
+description: >
+  L-band GEO-class bearer: continuous coverage with ~600 ms round-trip
+  delay and modest bandwidth — closer to voice/messaging L-band GEO than
+  to high-throughput consumer GEO (see geo_steady for HTS-scale Mbps).
+  Delay is grounded in the same consumer-GEO RTT range as geo_steady;
+  bandwidth/jitter/loss are illustrative for a constrained L-band plan.
+  See testdata/profiles/README.md.
+
+schedule:
+  mode: continuous
+  period_sec: 60
+
+curves:
+  # Same commonly-cited GEO RTT band as geo_steady (~550-800ms with
+  # ground processing); 600ms is the shared demo default.
+  delay_ms:
+    - { offset_sec: 0, value: 600 }
+  jitter_ms:
+    - { offset_sec: 0, value: 20 }
+  loss_pct:
+    - { offset_sec: 0, value: 1 }
+  # Modest L-band-class throughput (not HTS tens-of-Mbps).
+  bandwidth_kbps:
+    - { offset_sec: 0, value: 64 }

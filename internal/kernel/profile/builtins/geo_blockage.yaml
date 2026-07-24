@@ -1,0 +1,40 @@
+name: geo_blockage
+description: >
+  A continuously-covered GEO link (satellite always in view) with
+  intermittent, unscheduled blockage — the automotive case where coverage
+  never drops for orbital reasons, but a moving vehicle passes through a
+  tunnel, a cutting, or dense tree cover. Base link values mirror
+  geo_steady (delay grounded in measurements; jitter/loss/bandwidth
+  illustrative — see testdata/profiles/README.md). Blockage
+  offsets/durations are illustrative, chosen to exercise "surprise drop"
+  handling.
+
+  Unlike the periodic profiles, blockages carry NO lookahead
+  (lookahead_sec: 0): an app cannot predict a tunnel from orbital
+  mechanics, so it must detect the drop reactively via timeouts and
+  recover. Use this to stress-test reconnect/backoff and store-and-forward
+  logic against unpredictable outages rather than scheduled passes.
+
+schedule:
+  mode: continuous
+  period_sec: 300
+  # No advance notice: blockages are unscheduled surprise drops.
+  lookahead_sec: 0
+
+# Repeating outages within each 300s cycle (ascending, non-overlapping).
+blockages:
+  # Short underpass / tunnel.
+  - { offset_sec: 60, duration_sec: 8 }
+  # Longer tree-lined ridge (worse for a low-elevation GEO link).
+  - { offset_sec: 180, duration_sec: 20 }
+
+curves:
+  # Consumer GEO round-trip latency ~600ms (see geo_steady provenance).
+  delay_ms:
+    - { offset_sec: 0, value: 600 }
+  jitter_ms:
+    - { offset_sec: 0, value: 15 }
+  loss_pct:
+    - { offset_sec: 0, value: 0.5 }
+  bandwidth_kbps:
+    - { offset_sec: 0, value: 20000 }

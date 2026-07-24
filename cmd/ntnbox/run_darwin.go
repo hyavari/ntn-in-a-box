@@ -10,6 +10,8 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+
+	"github.com/hyavari/ntn-in-a-box/internal/kernel/profile"
 )
 
 // runPlatformGate on macOS re-invokes ntnbox run inside a Docker
@@ -41,14 +43,17 @@ func runViaDarwinDocker(args []string) error {
 		"--cap-add", "NET_ADMIN",
 	}
 
-	// Bind-mount profile or TLE file.
+	// Bind-mount profile or TLE file. Builtins are materialized from the
+	// host embed to a temp file so short names work even if ntnbox:latest
+	// predates ResolveLoad.
 	var containerCmd []string
 	if parsed.profilePath != "" {
-		absProfile, err := filepath.Abs(parsed.profilePath)
+		hostProfile, cleanup, err := profile.Materialize(parsed.profilePath)
 		if err != nil {
-			return fmt.Errorf("resolving profile path: %w", err)
+			return fmt.Errorf("resolving profile: %w", err)
 		}
-		dockerArgs = append(dockerArgs, "-v", absProfile+":/tmp/profile.yaml:ro")
+		defer cleanup()
+		dockerArgs = append(dockerArgs, "-v", hostProfile+":/tmp/profile.yaml:ro")
 		containerCmd = []string{"run", "--profile", "/tmp/profile.yaml"}
 		// Pass through --devices / --phase-sec and any other profile-mode flags.
 		containerCmd = append(containerCmd, parsed.extraArgs...)

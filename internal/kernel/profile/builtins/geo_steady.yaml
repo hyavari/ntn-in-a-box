@@ -1,0 +1,33 @@
+name: geo_steady
+description: >
+  A steady GEO link: always in coverage, flat high-latency impairment
+  profile (no ramp, no outage). Delay is grounded in real measurements
+  (see testdata/profiles/README.md); jitter/loss/bandwidth are
+  illustrative estimates for a modern HTS GEO consumer link, not
+  individually cited.
+
+schedule:
+  mode: continuous
+  period_sec: 60
+
+curves:
+  # Consumer GEO broadband round-trip latency is consistently measured
+  # around 550-800ms once ground processing/routing is included (pure
+  # propagation is ~240-260ms; the rest is processing overhead). 600ms
+  # sits in the commonly-cited range (Ookla 2025: HughesNet 683ms,
+  # Viasat 684ms median).
+  delay_ms:
+    - { offset_sec: 0, value: 600 }
+  # Not individually sourced; GEO satellites are geometrically
+  # stationary relative to the ground, so jitter here is mostly a
+  # processing/queueing artifact rather than a propagation effect.
+  jitter_ms:
+    - { offset_sec: 0, value: 15 }
+  # Not individually sourced; illustrative baseline for clear-weather
+  # conditions (rain fade would push this higher, not modeled here).
+  loss_pct:
+    - { offset_sec: 0, value: 0.5 }
+  # Not individually sourced; order-of-magnitude estimate for a modern
+  # High-Throughput-Satellite (HTS) GEO consumer plan (tens of Mbps).
+  bandwidth_kbps:
+    - { offset_sec: 0, value: 20000 }

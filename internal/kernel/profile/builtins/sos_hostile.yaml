@@ -1,0 +1,28 @@
+name: sos_hostile
+description: >
+  Hostile SOS variant: even shorter window and harsher loss than
+  sos_burst. Use this to stress-test offline queues and “don’t start a
+  large upload with seconds of coverage left” logic. Timing is
+  illustrative (10s window / 600s period). Values are engineering
+  estimates, not cited measurements — see testdata/profiles/README.md.
+
+schedule:
+  mode: periodic
+  period_sec: 600
+  window_sec: 10
+  lookahead_sec: 15
+
+curves:
+  delay_ms:
+    - { offset_sec: 0, value: 500 }
+    - { offset_sec: 10, value: 600 }
+  jitter_ms:
+    - { offset_sec: 0, value: 100 }
+    - { offset_sec: 10, value: 120 }
+  loss_pct:
+    - { offset_sec: 0, value: 40 }
+    - { offset_sec: 5, value: 20 }
+    - { offset_sec: 10, value: 50 }
+  bandwidth_kbps:
+    - { offset_sec: 0, value: 4 }
+    - { offset_sec: 10, value: 4 }

@@ -1,0 +1,26 @@
+name: nbiot_ntn
+description: >
+  NB-IoT NTN-class bearer: always-scheduled coverage with a narrowband,
+  messaging-first link budget. Models a 3GPP NTN IoT device talking over
+  a constrained satellite uplink (not broadband GEO/LEO). Delay is high
+  because of access/scheduling overhead on a narrowband channel; bandwidth
+  is a few kbps. Timing/curves are illustrative engineering estimates for
+  app-layer demos — not a cited 3GPP link budget. See
+  testdata/profiles/README.md.
+
+schedule:
+  mode: continuous
+  period_sec: 60
+
+curves:
+  # Narrowband IoT access + GEO/LEO NTN round-trip overhead; engineering
+  # estimate for messaging-class latency, not a measured NB-IoT-NTN trace.
+  delay_ms:
+    - { offset_sec: 0, value: 800 }
+  jitter_ms:
+    - { offset_sec: 0, value: 50 }
+  loss_pct:
+    - { offset_sec: 0, value: 2 }
+  # Few-kbps uplink suitable for small telemetry / SMS-sized payloads.
+  bandwidth_kbps:
+    - { offset_sec: 0, value: 4 }

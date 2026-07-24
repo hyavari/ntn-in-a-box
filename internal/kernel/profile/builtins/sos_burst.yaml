@@ -1,0 +1,38 @@
+name: sos_burst
+description: >
+  Emergency / SOS-style short connectivity burst: a brief window suitable
+  for a tiny text payload, then a long out-of-coverage gap. Models
+  store-and-forward messaging satellites used for distress/check-in
+  (Iridium/Swarm-class single-satellite visibility), not broadband LEO.
+  Timing is illustrative for a fast demo loop (15s window / 480s period),
+  not a real constellation revisit. Curve values are engineering
+  estimates for a weak-margin, messaging-first link — see
+  testdata/profiles/README.md.
+
+schedule:
+  mode: periodic
+  period_sec: 480
+  window_sec: 15
+  lookahead_sec: 20
+
+curves:
+  # Messaging-class delay: worse than broadband LEO steady-state;
+  # includes access/scheduling overhead on a constrained uplink.
+  delay_ms:
+    - { offset_sec: 0, value: 350 }
+    - { offset_sec: 5, value: 250 }
+    - { offset_sec: 15, value: 400 }
+  jitter_ms:
+    - { offset_sec: 0, value: 80 }
+    - { offset_sec: 5, value: 40 }
+    - { offset_sec: 15, value: 80 }
+  # High loss throughout — SOS demos must tolerate failures mid-burst.
+  loss_pct:
+    - { offset_sec: 0, value: 25 }
+    - { offset_sec: 5, value: 8 }
+    - { offset_sec: 15, value: 30 }
+  # Tiny payload budget (~few SMS-sized messages per window).
+  bandwidth_kbps:
+    - { offset_sec: 0, value: 8 }
+    - { offset_sec: 5, value: 16 }
+    - { offset_sec: 15, value: 8 }
