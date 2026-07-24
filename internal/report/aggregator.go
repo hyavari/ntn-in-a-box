@@ -41,21 +41,21 @@ type Aggregator struct {
 	sampler   Sampler
 	startedAt time.Time
 
-	bucket        covBucket
-	segmentStart  time.Time
-	inSec         float64
-	blockedSec    float64
-	outSec        float64
-	opens         int
-	closes        int
-	finalized     bool
+	bucket       covBucket
+	segmentStart time.Time
+	inSec        float64
+	blockedSec   float64
+	outSec       float64
+	opens        int
+	closes       int
+	finalized    bool
 
 	msgStatus map[string]string
 
-	unsubCov  func()
-	unsubMsg  func()
-	stopTick  chan struct{}
-	tickDone  chan struct{}
+	unsubCov func()
+	unsubMsg func()
+	stopTick chan struct{}
+	tickDone chan struct{}
 }
 
 // Config wires a new Aggregator.

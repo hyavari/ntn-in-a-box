@@ -10,12 +10,12 @@ import (
 
 // Report is the JSON field-data summary written at session end.
 type Report struct {
-	StartedAt   time.Time       `json:"started_at"`
-	EndedAt     time.Time       `json:"ended_at"`
-	DurationSec float64         `json:"duration_sec"`
-	Profile     string          `json:"profile"`
-	Coverage    CoverageStats   `json:"coverage"`
-	Messaging   MessagingStats  `json:"messaging"`
+	StartedAt   time.Time      `json:"started_at"`
+	EndedAt     time.Time      `json:"ended_at"`
+	DurationSec float64        `json:"duration_sec"`
+	Profile     string         `json:"profile"`
+	Coverage    CoverageStats  `json:"coverage"`
+	Messaging   MessagingStats `json:"messaging"`
 }
 
 // CoverageStats are wall-clock coverage buckets for the run.

@@ -53,7 +53,7 @@ func TestAggregator_MidWindowBlockage(t *testing.T) {
 	if r.Coverage.Opens != 0 || r.Coverage.Closes != 0 {
 		t.Fatalf("opens/closes = %d/%d, want 0/0", r.Coverage.Opens, r.Coverage.Closes)
 	}
-	assertNear(t, "in_sec", r.Coverage.InSec, 22)         // 0-10 + 18-30
+	assertNear(t, "in_sec", r.Coverage.InSec, 22)          // 0-10 + 18-30
 	assertNear(t, "blocked_sec", r.Coverage.BlockedSec, 8) // 10-18
 	assertNear(t, "out_sec", r.Coverage.OutSec, 0)
 	assertNear(t, "pct_sum", r.Coverage.InPct+r.Coverage.BlockedPct+r.Coverage.OutPct, 100)
