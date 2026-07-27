@@ -153,6 +153,7 @@ Inputs, replay/record examples: [Getting started](guides/getting-started.md#gith
 | [Getting started](guides/getting-started.md) | Demos, TUI/GUI detail, samples, Action, Android |
 | [Profiles](guides/profiles.md) | YAML schema, blockages, out-of-coverage |
 | [Report](guides/report.md) | `--report` JSON field-data summary |
+| [Standards](guides/standards.md) | 3GPP NTN / 5GAA / CAMARA framing (what we claim) |
 | [TLE](guides/tle.md) | Orbital TLE generate/run |
 | [Architecture](guides/architecture.md) | Kernel, modules, data flow |
 | [API](guides/api.md) | HTTP endpoints |

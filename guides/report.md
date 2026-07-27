@@ -73,3 +73,49 @@ Averages (`mos_avg`, stress, PLC) use every in-coverage sample. Percentiles
 (`mouth_to_ear_ms_p50` / `p95`) use at most the last ~3600 samples (~1 hour
 at 1 Hz) to bound memory.
 
+## Example (`demo-voice.sh`)
+
+After a short `lband_geo` + `voicecall` run, `jq .` looks like:
+
+```json
+{
+  "started_at": "2026-07-27T16:09:37Z",
+  "ended_at": "2026-07-27T16:10:51Z",
+  "duration_sec": 74.5,
+  "profile": "lband_geo",
+  "coverage": {
+    "in_pct": 100,
+    "blocked_pct": 0,
+    "out_pct": 0,
+    "in_sec": 74.5,
+    "blocked_sec": 0,
+    "out_sec": 0,
+    "opens": 1,
+    "closes": 0
+  },
+  "messaging": { "present": false },
+  "voice": {
+    "capable": true,
+    "estimates": {
+      "mouth_to_ear_ms_p50": 340,
+      "mouth_to_ear_ms_p95": 340,
+      "mos_avg": 3.47,
+      "jitter_buffer_stress_avg": 0.25,
+      "plc_pressure_avg": 0.1,
+      "in_coverage_sample_count": 74
+    },
+    "calls": {
+      "present": true,
+      "attempted": 7,
+      "completed": 6,
+      "dropped": 1,
+      "open": 0,
+      "completion_rate": 0.857,
+      "drop_on_close_rate": 0.143
+    }
+  }
+}
+```
+
+Inspect just the voice block: `jq .voice out.json`.
+

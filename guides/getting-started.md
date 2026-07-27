@@ -10,6 +10,7 @@
 
 For YAML schedules and blockages, see [Profiles](profiles.md).
 For orbital TLE, see [TLE](tle.md).
+For what we claim vs 3GPP NTN / 5GAA / CAMARA, see [Standards](standards.md).
 
 ## Demo script
 
