@@ -223,6 +223,34 @@ func TestUnsubscribeCoverage(t *testing.T) {
 	}
 }
 
+func TestPublishCall_NeverThrottled(t *testing.T) {
+	b := New(DefaultLinkStateThrottle)
+	var received []CallEvent
+	b.SubscribeCall(func(ev CallEvent) { received = append(received, ev) })
+
+	for i := 0; i < 3; i++ {
+		b.PublishCall(CallEvent{ID: "c1", Status: "started", At: testStart})
+	}
+	if len(received) != 3 {
+		t.Fatalf("got %d call events, want 3", len(received))
+	}
+}
+
+func TestUnsubscribeCall(t *testing.T) {
+	b := New(DefaultLinkStateThrottle)
+	var count int
+	unsub := b.SubscribeCall(func(_ CallEvent) { count++ })
+	b.PublishCall(CallEvent{ID: "c1", Status: "started", At: testStart})
+	if count != 1 {
+		t.Fatalf("before unsub: count = %d, want 1", count)
+	}
+	unsub()
+	b.PublishCall(CallEvent{ID: "c1", Status: "completed", At: testStart})
+	if count != 1 {
+		t.Fatalf("after unsub: count = %d, want 1", count)
+	}
+}
+
 func TestUnsubscribeLinkState(t *testing.T) {
 	b := New(LinkStateThrottle{Interval: 0, DeltaThreshold: 0})
 	var count int

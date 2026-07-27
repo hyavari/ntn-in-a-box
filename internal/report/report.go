@@ -16,6 +16,7 @@ type Report struct {
 	Profile     string         `json:"profile"`
 	Coverage    CoverageStats  `json:"coverage"`
 	Messaging   MessagingStats `json:"messaging"`
+	Voice       VoiceStats     `json:"voice"`
 }
 
 // CoverageStats are wall-clock coverage buckets for the run.
@@ -50,6 +51,69 @@ func (m MessagingStats) MarshalJSON() ([]byte, error) {
 	return json.Marshal(full(m))
 }
 
+// VoiceStats are voice-grade estimates and optional call session tallies.
+type VoiceStats struct {
+	Capable   bool           `json:"capable"`
+	Estimates VoiceEstimates `json:"estimates"`
+	Calls     CallStats      `json:"calls"`
+}
+
+// VoiceEstimates are link-derived illustrative voice metrics.
+type VoiceEstimates struct {
+	MouthToEarMsP50       float64 `json:"mouth_to_ear_ms_p50"`
+	MouthToEarMsP95       float64 `json:"mouth_to_ear_ms_p95"`
+	MOSAvg                float64 `json:"mos_avg"`
+	JitterBufferStressAvg float64 `json:"jitter_buffer_stress_avg"`
+	PLCPressureAvg        float64 `json:"plc_pressure_avg"`
+	InCoverageSampleCount int     `json:"in_coverage_sample_count"`
+}
+
+// CallStats summarize ingested CallEvent lifecycle outcomes.
+type CallStats struct {
+	Present         bool    `json:"present"`
+	Attempted       int     `json:"attempted"`
+	Completed       int     `json:"completed"`
+	Dropped         int     `json:"dropped"`
+	Open            int     `json:"open"`
+	CompletionRate  float64 `json:"completion_rate"`
+	DropOnCloseRate float64 `json:"drop_on_close_rate"`
+}
+
+// MarshalJSON collapses idle non-capable voice to {"capable":false}.
+// Call tallies are kept even when the profile is not voice-capable, matching
+// call-events ingest (telemetry anytime a device posts). Estimates are omitted
+// when capable but no in-coverage samples were collected (avoids mos_avg: 0).
+func (v VoiceStats) MarshalJSON() ([]byte, error) {
+	if !v.Capable && !v.Calls.Present {
+		return []byte(`{"capable":false}`), nil
+	}
+	if !v.Capable {
+		type callsOnly struct {
+			Capable bool      `json:"capable"`
+			Calls   CallStats `json:"calls"`
+		}
+		return json.Marshal(callsOnly{Capable: false, Calls: v.Calls})
+	}
+	if v.Estimates.InCoverageSampleCount == 0 {
+		type noEstimates struct {
+			Capable bool      `json:"capable"`
+			Calls   CallStats `json:"calls"`
+		}
+		return json.Marshal(noEstimates{Capable: true, Calls: v.Calls})
+	}
+	type full VoiceStats
+	return json.Marshal(full(v))
+}
+
+// MarshalJSON omits detail fields when no call events were observed.
+func (c CallStats) MarshalJSON() ([]byte, error) {
+	if !c.Present {
+		return []byte(`{"present":false}`), nil
+	}
+	type full CallStats
+	return json.Marshal(full(c))
+}
+
 // WriteJSON writes r to path with indentation.
 func WriteJSON(path string, r Report) error {
 	f, err := os.Create(path)
@@ -72,7 +136,19 @@ func SummaryLine(r Report, path string) string {
 		msg = fmt.Sprintf("messaging=delivered %d/%d (%.0f%%)",
 			r.Messaging.Delivered, r.Messaging.Unique, r.Messaging.DeliveryRate*100)
 	}
-	return fmt.Sprintf("report: coverage in=%.1f%% blocked=%.1f%% out=%.1f%% opens=%d closes=%d %s → %s",
+	voice := "voice=n/a"
+	hasSamples := r.Voice.Estimates.InCoverageSampleCount > 0
+	switch {
+	case r.Voice.Capable && hasSamples && r.Voice.Calls.Present:
+		voice = fmt.Sprintf("voice=mos %.1f calls %d/%d",
+			r.Voice.Estimates.MOSAvg, r.Voice.Calls.Completed, r.Voice.Calls.Attempted)
+	case r.Voice.Capable && hasSamples:
+		voice = fmt.Sprintf("voice=mos %.1f", r.Voice.Estimates.MOSAvg)
+	case r.Voice.Calls.Present:
+		voice = fmt.Sprintf("voice=calls %d/%d",
+			r.Voice.Calls.Completed, r.Voice.Calls.Attempted)
+	}
+	return fmt.Sprintf("report: coverage in=%.1f%% blocked=%.1f%% out=%.1f%% opens=%d closes=%d %s %s → %s",
 		r.Coverage.InPct, r.Coverage.BlockedPct, r.Coverage.OutPct,
-		r.Coverage.Opens, r.Coverage.Closes, msg, path)
+		r.Coverage.Opens, r.Coverage.Closes, msg, voice, path)
 }

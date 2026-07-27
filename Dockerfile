@@ -15,6 +15,7 @@ COPY . .
 
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/ntnbox ./cmd/ntnbox/
 RUN CGO_ENABLED=0 go build -o /out/poller ./cmd/poller/
+RUN CGO_ENABLED=0 go build -o /out/voicecall ./cmd/voicecall/
 
 FROM node:24-alpine AS node
 
@@ -34,6 +35,7 @@ RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 
 COPY --from=builder /out/ntnbox /usr/local/bin/ntnbox
 COPY --from=builder /out/poller /usr/local/bin/poller
+COPY --from=builder /out/voicecall /usr/local/bin/voicecall
 COPY testdata/profiles/ /profiles/
 
 ENTRYPOINT ["ntnbox"]

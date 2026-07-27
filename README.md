@@ -106,6 +106,8 @@ Field meanings: [Report](guides/report.md).
 More demos (record/replay, samples, SOS profiles): [Getting started](guides/getting-started.md).
 Continuous GEO with surprise tunnel drops: `./scripts/demo-blockage.sh`
 ([Profiles](guides/profiles.md)).
+Voice-grade estimates + synthetic calls: `./scripts/demo-voice.sh`
+([Report](guides/report.md)).
 
 <img src="guides/images/tui.png" alt="TUI Dashboard" width="800">
 

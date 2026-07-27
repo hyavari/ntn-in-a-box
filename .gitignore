@@ -4,6 +4,7 @@ docs/
 # Built binaries
 /ntnbox
 /poller
+/voicecall
 /messenger-client
 
 # Go

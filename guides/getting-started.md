@@ -5,7 +5,7 @@
    `sudo ./ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- ./poller` (Linux).
 3. Open `http://localhost:8080/ui` when using the demo script (or `--addr :8080`).
 4. Try a sample below, or drop the GitHub Action into CI.
-5. Optional: `--report out.json` writes a coverage (+ messaging) summary —
+5. Optional: `--report out.json` writes a coverage (+ messaging / voice) summary —
    see [Field-data report](report.md).
 
 For YAML schedules and blockages, see [Profiles](profiles.md).
@@ -34,6 +34,7 @@ The GUI is always available at `http://localhost:8080/ui` when using
 the demo script.
 
 Continuous GEO with surprise drops: `./scripts/demo-blockage.sh`
+Voice-grade metrics + call sessions: `./scripts/demo-voice.sh`
 ([Profiles](profiles.md)).
 
 ## TUI dashboard

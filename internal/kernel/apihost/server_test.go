@@ -835,3 +835,157 @@ func TestSSE_ForwardsReplayDone(t *testing.T) {
 		t.Errorf("expected kind:replay_done in body, got:\n%s", body)
 	}
 }
+
+func TestCapabilities_VoiceProfile(t *testing.T) {
+	p := &profile.Profile{
+		Name: "lband_geo",
+		Schedule: profile.Schedule{
+			Mode: profile.ModeContinuous, PeriodSec: 60,
+		},
+		Curves: profile.Curves{
+			DelayMs:       []profile.Point{{OffsetSec: 0, Value: 600}},
+			JitterMs:      []profile.Point{{OffsetSec: 0, Value: 20}},
+			LossPct:       []profile.Point{{OffsetSec: 0, Value: 1}},
+			BandwidthKbps: []profile.Point{{OffsetSec: 0, Value: 64}},
+		},
+	}
+	srv := New(Config{
+		Profiles: []*profile.Profile{p},
+		Registry: device.NewRegistry(),
+	})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	body := `{"id":"v-1","type":"virtual_ue","profile_name":"lband_geo"}`
+	resp, err := http.Post(ts.URL+"/devices", "application/json", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+
+	resp, err = http.Get(ts.URL + "/devices/v-1/capabilities")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	var caps struct {
+		Voice bool `json:"voice"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&caps); err != nil {
+		t.Fatal(err)
+	}
+	if !caps.Voice {
+		t.Error("lband_geo should advertise voice")
+	}
+}
+
+func TestCapabilities_VoiceFalseForNBIoT(t *testing.T) {
+	p := &profile.Profile{
+		Name: "nbiot_ntn",
+		Schedule: profile.Schedule{
+			Mode: profile.ModeContinuous, PeriodSec: 60,
+		},
+		Curves: profile.Curves{
+			DelayMs:       []profile.Point{{OffsetSec: 0, Value: 800}},
+			JitterMs:      []profile.Point{{OffsetSec: 0, Value: 50}},
+			LossPct:       []profile.Point{{OffsetSec: 0, Value: 2}},
+			BandwidthKbps: []profile.Point{{OffsetSec: 0, Value: 4}},
+		},
+	}
+	srv := New(Config{
+		Profiles: []*profile.Profile{p},
+		Registry: device.NewRegistry(),
+	})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	body := `{"id":"nb-1","type":"virtual_ue","profile_name":"nbiot_ntn"}`
+	resp, err := http.Post(ts.URL+"/devices", "application/json", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+
+	resp, err = http.Get(ts.URL + "/devices/nb-1/capabilities")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	var caps struct {
+		Voice bool `json:"voice"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&caps); err != nil {
+		t.Fatal(err)
+	}
+	if caps.Voice {
+		t.Error("nbiot_ntn should not advertise voice")
+	}
+}
+
+func TestPostCallEvent(t *testing.T) {
+	bus := eventbus.New(eventbus.DefaultLinkStateThrottle)
+	var got []eventbus.CallEvent
+	bus.SubscribeCall(func(ev eventbus.CallEvent) { got = append(got, ev) })
+
+	p := &profile.Profile{
+		Name: "leo_pass_90s",
+		Schedule: profile.Schedule{
+			Mode: profile.ModePeriodic, PeriodSec: 600, WindowSec: 90, LookaheadSec: 30,
+		},
+		Curves: profile.Curves{
+			DelayMs:       []profile.Point{{OffsetSec: 0, Value: 150}},
+			JitterMs:      []profile.Point{{OffsetSec: 0, Value: 40}},
+			LossPct:       []profile.Point{{OffsetSec: 0, Value: 10}},
+			BandwidthKbps: []profile.Point{{OffsetSec: 0, Value: 2000}},
+		},
+	}
+	srv := New(Config{
+		Profiles: []*profile.Profile{p},
+		Registry: device.NewRegistry(),
+		Bus:      bus,
+	})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	reg := `{"id":"ue-call","type":"virtual_ue","profile_name":"leo_pass_90s"}`
+	resp, err := http.Post(ts.URL+"/devices", "application/json", bytes.NewBufferString(reg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+
+	resp, err = http.Post(ts.URL+"/devices/ue-call/call-events", "application/json",
+		bytes.NewBufferString(`{"id":"call-1","status":"started"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202", resp.StatusCode)
+	}
+	if len(got) != 1 || got[0].ID != "call-1" || got[0].Status != "started" || got[0].DeviceID != "ue-call" {
+		t.Fatalf("got = %+v", got)
+	}
+
+	resp, err = http.Post(ts.URL+"/devices/ue-call/call-events", "application/json",
+		bytes.NewBufferString(`{"id":"call-1","status":"nope"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("bad status = %d, want 400", resp.StatusCode)
+	}
+
+	resp, err = http.Post(ts.URL+"/devices/missing/call-events", "application/json",
+		bytes.NewBufferString(`{"id":"call-1","status":"started"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("missing device status = %d, want 404", resp.StatusCode)
+	}
+}

@@ -1,7 +1,12 @@
 package apihost
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"html"
+	"mime"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,6 +17,7 @@ import (
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/device"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/eventbus"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/profile"
+	"github.com/hyavari/ntn-in-a-box/internal/voice"
 )
 
 // SessionInfo describes the current session mode for the GUI frontend.
@@ -139,13 +145,42 @@ func (s *Server) evaluatorFor(deviceID string) condition.Eval {
 }
 
 // ListenAndServe starts the HTTP server on addr.
+// Accepted connections enable TCP keep-alives (same as Serve).
 func (s *Server) ListenAndServe(addr string) error {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	return s.Serve(ln)
+}
+
+// Serve serves HTTP on ln using the same handler as ListenAndServe.
+// Accepted TCP connections are configured with keep-alives so long-lived
+// streams (e.g. /events SSE) do not rely on silent middleboxes alone.
+func (s *Server) Serve(ln net.Listener) error {
 	srv := &http.Server{
-		Addr:              addr,
 		Handler:           s.mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	return srv.ListenAndServe()
+	return srv.Serve(tcpKeepAliveListener{ln})
+}
+
+// tcpKeepAliveListener enables TCP keep-alives on accepted connections,
+// matching net/http.Server.ListenAndServe's documented behavior.
+type tcpKeepAliveListener struct {
+	net.Listener
+}
+
+func (ln tcpKeepAliveListener) Accept() (net.Conn, error) {
+	c, err := ln.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	if tc, ok := c.(*net.TCPConn); ok {
+		_ = tc.SetKeepAlive(true)
+		_ = tc.SetKeepAlivePeriod(3 * time.Minute)
+	}
+	return c, nil
 }
 
 func (s *Server) registerRoutes() {
@@ -159,6 +194,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("GET /devices/{id}/condition", s.handleGetCondition)
 	s.mux.HandleFunc("GET /devices/{id}/lookahead", s.handleGetLookahead)
 	s.mux.HandleFunc("GET /devices/{id}/capabilities", s.handleGetCapabilities)
+	s.mux.HandleFunc("POST /devices/{id}/call-events", s.handlePostCallEvent)
 	s.mux.HandleFunc("GET /events", s.handleSSE)
 	s.registerUI()
 }
@@ -307,19 +343,28 @@ func (s *Server) handleGetCondition(w http.ResponseWriter, r *http.Request) {
 
 	resp := conditionResponse{
 		InCoverage:             cov.InCoverage,
-		ElapsedSec:             cov.ElapsedSec,
+		ElapsedSec:             finiteSec(cov.ElapsedSec),
 		UntilNextTransitionSec: finiteSec(cov.UntilNextTransitionSec),
-		CyclePosSec:            cov.CyclePosSec,
+		CyclePosSec:            finiteSec(cov.CyclePosSec),
 		InBlockage:             cov.InBlockage,
 	}
 	if cov.InCoverage {
-		resp.DelayMs = link.DelayMs
-		resp.JitterMs = link.JitterMs
-		resp.LossPct = link.LossPct
-		resp.BandwidthKbps = link.BandwidthKbps
+		// Omit non-finite link fields (omitempty) rather than substituting 1e18.
+		if isFinite(link.DelayMs) {
+			resp.DelayMs = link.DelayMs
+		}
+		if isFinite(link.JitterMs) {
+			resp.JitterMs = link.JitterMs
+		}
+		if isFinite(link.LossPct) {
+			resp.LossPct = link.LossPct
+		}
+		if isFinite(link.BandwidthKbps) {
+			resp.BandwidthKbps = link.BandwidthKbps
+		}
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	writeJSONAccept(w, r.Header.Get("Accept"), http.StatusOK, resp)
 }
 
 type lookaheadResponse struct {
@@ -394,9 +439,91 @@ func toDeviceResponse(d device.Device) deviceResponse {
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
+	writeJSONAccept(w, "", status, v)
+}
+
+// writeJSONAccept encodes v as indented JSON. When the client prefers
+// text/html over application/json (browser navigation), wrap in a minimal
+// HTML document so the body is visible. Prefer JSON when q-values are equal
+// and application/json is listed first, or when HTML is only an also-ran.
+func writeJSONAccept(w http.ResponseWriter, accept string, status int, v any) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(v); err != nil {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error":"json encode failed"}`))
+		return
+	}
+	if prefersHTML(accept) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(status)
+		_, _ = fmt.Fprintf(w, `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>ntnbox</title>
+<style>body{font:14px/1.4 ui-monospace,Menlo,Consolas,monospace;margin:1.5rem;background:#111;color:#e8e8e8}
+pre{white-space:pre-wrap;word-break:break-word}</style></head>
+<body><pre>%s</pre></body></html>`, html.EscapeString(buf.String()))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	_, _ = w.Write(buf.Bytes())
+}
+
+// prefersHTML reports whether Accept prefers text/html over application/json.
+func prefersHTML(accept string) bool {
+	htmlQ, htmlPos, htmlOK := acceptQuality(accept, "text/html")
+	if !htmlOK {
+		return false
+	}
+	jsonQ, jsonPos, jsonOK := acceptQuality(accept, "application/json")
+	if !jsonOK {
+		return true
+	}
+	if htmlQ != jsonQ {
+		return htmlQ > jsonQ
+	}
+	return htmlPos < jsonPos
+}
+
+// acceptQuality returns the best q-value and list position for want in Accept.
+func acceptQuality(accept, want string) (q float64, pos int, ok bool) {
+	wantType, wantSub, _ := strings.Cut(want, "/")
+	bestQ := -1.0
+	bestPos := -1
+	for i, part := range strings.Split(accept, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		media, params, err := mime.ParseMediaType(part)
+		if err != nil {
+			continue
+		}
+		partQ := 1.0
+		if qs, has := params["q"]; has {
+			parsed, err := strconv.ParseFloat(qs, 64)
+			if err != nil {
+				continue
+			}
+			partQ = parsed
+		}
+		if partQ <= 0 {
+			continue
+		}
+		mt, ms, _ := strings.Cut(media, "/")
+		matched := (mt == wantType && ms == wantSub) ||
+			(mt == wantType && ms == "*") ||
+			(mt == "*" && ms == "*")
+		if !matched {
+			continue
+		}
+		if !ok || partQ > bestQ {
+			bestQ, bestPos, ok = partQ, i, true
+		}
+	}
+	return bestQ, bestPos, ok
 }
 
 type capabilitiesResponse struct {
@@ -447,7 +574,7 @@ func (s *Server) handleGetCapabilities(w http.ResponseWriter, r *http.Request) {
 		Messaging:          messaging, // profile is messaging-oriented (D2C/SOS)
 		StoreAndForward:    saf,
 		SOS:                sos,
-		Voice:              false,
+		Voice:              voice.ProfileCapable(name),
 		Data:               true,
 		CoverageMode:       string(p.Schedule.Mode),
 		MaxBandwidthKbps:   maxBw,
@@ -455,4 +582,45 @@ func (s *Server) handleGetCapabilities(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+type callEventRequest struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+}
+
+func (s *Server) handlePostCallEvent(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if _, err := s.registry.Get(id); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	if s.bus == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "event bus unavailable"})
+		return
+	}
+
+	var req callEventRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if req.ID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+	switch req.Status {
+	case "started", "completed", "dropped":
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "status must be started, completed, or dropped"})
+		return
+	}
+
+	s.bus.PublishCall(eventbus.CallEvent{
+		ID:       req.ID,
+		DeviceID: id,
+		Status:   req.Status,
+		At:       time.Now().UTC(),
+	})
+	writeJSON(w, http.StatusAccepted, map[string]string{"id": req.ID, "status": req.Status})
 }

@@ -36,7 +36,8 @@ Adaptation patterns (queue flush, burst gates, lead_sec, store-and-forward):
 | GET | `/devices/{id}` | Get a device |
 | GET | `/devices/{id}/condition` | Current coverage + link state |
 | GET | `/devices/{id}/lookahead` | Next open/close times, window duration, elev (TLE); `?lead_sec=` advisory |
-| GET | `/devices/{id}/capabilities` | Satellite capability discovery |
+| GET | `/devices/{id}/capabilities` | Satellite capability discovery (`voice` for lband_geo / geo_steady / geo_blockage) |
+| POST | `/devices/{id}/call-events` | Voice call telemetry ingest (`{id, status}`: started\|completed\|dropped) — not a full Voice API |
 | POST | `/devices/{id}/messages` | Store-and-forward send (`to`: `cloud` or device id) |
 | GET | `/devices/{id}/messages` | Delivered inbox (oldest-first); `cloud` is a synthetic recipient |
 | GET | `/messages/{mid}` | Message lifecycle status |

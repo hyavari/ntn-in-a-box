@@ -8,6 +8,7 @@ ntnbox run --report out.json --profile testdata/profiles/geo_blockage.yaml -- ./
 # or via demos
 ./scripts/demo.sh --report out.json
 ./scripts/demo-blockage.sh --report out.json
+./scripts/demo-voice.sh --report out.json
 ```
 
 On stop (command exit or Ctrl+C), ntnbox writes the file and prints a one-line
@@ -28,6 +29,14 @@ stderr summary.
 | `messaging.unique` | Distinct message IDs seen |
 | `messaging.delivered` / `failed` / `open` | Latest status per ID |
 | `messaging.delivery_rate` | `delivered / unique` when `present` |
+| `voice.capable` | `true` for voice-oriented profiles (`lband_geo`, `geo_steady`, `geo_blockage`) |
+| `voice.estimates.*` | Link-derived mouth-to-ear / MOS-ish / stress (when capable) |
+| `voice.calls.present` | `false` unless call-event telemetry was ingested |
+| `voice.calls.attempted` / `completed` / `dropped` / `open` | Latest status per call id (`open` = in-flight / `started`) |
+| `voice.calls.completion_rate` / `drop_on_close_rate` | Rates over attempted |
+
+Call session stats are included whenever call-events were ingested, even if
+`voice.capable` is false (no link-derived estimates in that case).
 
 ### Coverage seconds vs percent
 
@@ -44,3 +53,23 @@ not only from `window_closed` events.
 
 Poller/curl-only runs leave messaging as `{ "present": false }`. Messaging
 stats appear when something uses the store-and-forward API during the run.
+
+### Voice estimates (illustrative)
+
+When `voice.capable` is true, the report samples in-coverage delay/jitter/loss
+about once per second and derives engineering estimates (not ITU E-model
+calibrated). If no in-coverage samples were collected, `estimates` is omitted
+(so short or fully-blocked runs do not report `mos_avg: 0`).
+
+- `mouth_to_ear_ms ≈ delay_ms / 2 + 40`
+- jitter-buffer stress and PLC pressure from jitter/loss
+- coarse MOS in `[1.0, 4.5]`
+
+Call session stats appear when a client posts
+`POST /devices/{id}/call-events` (the `voicecall` sample does this). That
+ingest is telemetry only — not a full Voice REST API.
+
+Averages (`mos_avg`, stress, PLC) use every in-coverage sample. Percentiles
+(`mouth_to_ear_ms_p50` / `p95`) use at most the last ~3600 samples (~1 hour
+at 1 Hz) to bound memory.
+

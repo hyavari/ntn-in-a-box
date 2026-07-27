@@ -25,6 +25,7 @@ import (
 	"github.com/hyavari/ntn-in-a-box/internal/report"
 	"github.com/hyavari/ntn-in-a-box/internal/tle"
 	ntntui "github.com/hyavari/ntn-in-a-box/internal/tui"
+	"github.com/hyavari/ntn-in-a-box/internal/voice"
 )
 
 // errProxyComplete signals that the Docker proxy ran the command
@@ -273,11 +274,12 @@ func runRun(args []string) error {
 			primaryID = deviceEvals[0].id
 		}
 		agg := report.New(report.Config{
-			Bus:      bus,
-			Sampler:  report.EvalSampler{Eval: eval},
-			Profile:  profileName,
-			DeviceID: primaryID,
-			Start:    time.Now().UTC(),
+			Bus:          bus,
+			Sampler:      report.EvalSampler{Eval: eval},
+			Profile:      profileName,
+			DeviceID:     primaryID,
+			Start:        time.Now().UTC(),
+			VoiceCapable: voice.ProfileCapable(profileName),
 		})
 		path := *reportPath
 		defer func() {
@@ -295,6 +297,7 @@ func runRun(args []string) error {
 	loopCtx, loopCancel := context.WithCancel(ctx)
 	defer loopCancel()
 
+	var apiBase string
 	if *addr != "" {
 		var profiles []*profile.Profile
 		if p != nil {
@@ -343,7 +346,10 @@ func runRun(args []string) error {
 				LookaheadSec: lookaheadSec,
 			}).Run(loopCtx)
 		})
-		listenAPIHost(srv, *addr, eval)
+		// Loopback is invisible inside the netns: dual-bind loopback + veth
+		// gateway (not 0.0.0.0) so sandbox clients can reach the API.
+		plan := planSandboxListen(*addr)
+		apiBase = listenAPIHosts(srv, plan.Addrs, plan.APIBase, eval)
 	}
 
 	// Start driver loop(s): primary + peer TLE observers or phase-offset peers.
@@ -419,7 +425,11 @@ func runRun(args []string) error {
 			DeviceIDs:     deviceIDs,
 			Evals:         evals,
 			CmdFn: func() *exec.Cmd {
-				return ns.Command(cmdArgs[0], cmdArgs[1:]...)
+				cmd := ns.Command(cmdArgs[0], cmdArgs[1:]...)
+				if apiBase != "" {
+					cmd.Env = append(os.Environ(), "NTNBOX_API_BASE="+apiBase)
+				}
+				return cmd
 			},
 		})
 	}
@@ -459,6 +469,11 @@ func runRun(args []string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
+	// Sandbox apps reach the API via the planned base (usually the veth
+	// gateway), not 127.0.0.1 (sandbox loopback).
+	if apiBase != "" {
+		cmd.Env = append(os.Environ(), "NTNBOX_API_BASE="+apiBase)
+	}
 
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("starting command: %w", err)

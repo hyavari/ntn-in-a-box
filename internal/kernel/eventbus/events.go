@@ -68,6 +68,18 @@ type MessageEvent struct {
 // MessageHandler is called for every published MessageEvent.
 type MessageHandler func(MessageEvent)
 
+// CallEvent is published when a synthetic (or ingested) voice call changes status.
+// Status is one of: started, completed, dropped.
+type CallEvent struct {
+	ID       string
+	DeviceID string
+	Status   string
+	At       time.Time
+}
+
+// CallHandler is called for every published CallEvent.
+type CallHandler func(CallEvent)
+
 // ObservabilityEvent is a generic, unthrottled event for metrics/
 // tracing — the "emit" hook in the module contract.
 type ObservabilityEvent struct {
