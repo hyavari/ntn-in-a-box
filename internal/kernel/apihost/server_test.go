@@ -3,6 +3,7 @@ package apihost
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +20,31 @@ var testStart = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
 func newTestBus() *eventbus.Bus {
 	return eventbus.New(eventbus.LinkStateThrottle{Interval: 0, DeltaThreshold: 0})
+}
+
+// readSSEChunk reads from an SSE body with a deadline so a lost event fails
+// fast instead of hanging until the package test timeout.
+func readSSEChunk(t *testing.T, body io.Reader, buf []byte) int {
+	t.Helper()
+	type result struct {
+		n   int
+		err error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		n, err := body.Read(buf)
+		ch <- result{n, err}
+	}()
+	select {
+	case r := <-ch:
+		if r.err != nil {
+			t.Fatalf("reading SSE stream: %v", r.err)
+		}
+		return r.n
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out reading SSE stream")
+		return 0
+	}
 }
 
 func testServer(t *testing.T) (*Server, *httptest.Server) {
@@ -489,17 +515,14 @@ func TestSSE_LookaheadEnrichmentOnOpening(t *testing.T) {
 
 	// Drain initial coverage event.
 	buf := make([]byte, 8192)
-	_, _ = resp.Body.Read(buf)
+	_ = readSSEChunk(t, resp.Body, buf)
 
 	bus.PublishCoverageEvent(eventbus.CoverageEvent{
 		Kind: eventbus.KindWindowOpening,
 		At:   epoch.Add(50 * time.Second),
 	})
 
-	n, err := resp.Body.Read(buf)
-	if err != nil {
-		t.Fatalf("read: %v", err)
-	}
+	n := readSSEChunk(t, resp.Body, buf)
 	body := string(buf[:n])
 	if !bytes.Contains([]byte(body), []byte("window_opening")) {
 		t.Fatalf("expected window_opening, got:\n%s", body)
@@ -515,10 +538,7 @@ func TestSSE_LookaheadEnrichmentOnOpening(t *testing.T) {
 		Kind: eventbus.KindWindowOpened,
 		At:   epoch,
 	})
-	n, err = resp.Body.Read(buf)
-	if err != nil {
-		t.Fatalf("read opened: %v", err)
-	}
+	n = readSSEChunk(t, resp.Body, buf)
 	openedBody := string(buf[:n])
 	if !bytes.Contains([]byte(openedBody), []byte("window_opened")) {
 		t.Fatalf("expected window_opened, got:\n%s", openedBody)
@@ -605,10 +625,7 @@ func TestSSE_StreamsEvents(t *testing.T) {
 
 	// Read from the response body.
 	buf := make([]byte, 4096)
-	n, err := resp.Body.Read(buf)
-	if err != nil {
-		t.Fatalf("reading SSE stream: %v", err)
-	}
+	n := readSSEChunk(t, resp.Body, buf)
 	body := string(buf[:n])
 
 	if !bytes.Contains([]byte(body), []byte("event: linkstate")) {
@@ -822,10 +839,7 @@ func TestSSE_ForwardsReplayDone(t *testing.T) {
 
 	// Read from the response body.
 	buf := make([]byte, 4096)
-	n, err := resp.Body.Read(buf)
-	if err != nil {
-		t.Fatalf("reading SSE stream: %v", err)
-	}
+	n := readSSEChunk(t, resp.Body, buf)
 	body := string(buf[:n])
 
 	if !bytes.Contains([]byte(body), []byte("event: lifecycle")) {

@@ -54,12 +54,12 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	flusher.Flush()
 
 	// Buffered channel to decouple bus callbacks from the write loop.
 	ch := make(chan []byte, 64)
 
-	// Subscribe to coverage events.
+	// Subscribe before the first Flush so clients that race Publish right after
+	// http.Get returns cannot lose events (Get completes on header flush).
 	unsubCoverage := s.bus.SubscribeCoverage(func(ev eventbus.CoverageEvent) {
 		payload := sseCoverageEvent{
 			Kind:                string(ev.Kind),
@@ -180,6 +180,8 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		default:
 		}
 	})
+
+	flusher.Flush()
 
 	// Write loop: stream events until client disconnects.
 	ctx := r.Context()
