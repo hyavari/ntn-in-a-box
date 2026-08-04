@@ -89,10 +89,10 @@ TCP connection migration (in-flight TCP may reset across a route flip).
 
 ```yaml
 terrestrial_fallback: true
-terrestrial:                 # optional; defaults shown
+terrestrial:                 # optional; omit block → full defaults below
   delay_ms: 30
   jitter_ms: 5
-  loss_pct: 0.1
+  loss_pct: 0.1              # explicit 0 is kept (not overwritten)
   bandwidth_kbps: 10000
 ```
 

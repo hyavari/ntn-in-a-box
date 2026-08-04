@@ -9,6 +9,7 @@ ntnbox run --report out.json --profile testdata/profiles/geo_blockage.yaml -- ./
 ./scripts/demo.sh --report out.json
 ./scripts/demo-blockage.sh --report out.json
 ./scripts/demo-voice.sh --report out.json
+./scripts/demo-handover.sh --report out.json
 ```
 
 On stop (command exit or Ctrl+C), ntnbox writes the file and prints a one-line
@@ -43,6 +44,21 @@ Call session stats are included whenever call-events were ingested, even if
 
 Handover tallies appear only for dual-path (`terrestrial_fallback`) runs;
 otherwise `handover` is `{ "present": false }`.
+
+Compact handover block after `./scripts/demo-handover.sh --report out.json`:
+
+```json
+{
+  "handover": {
+    "present": true,
+    "count": 1,
+    "to_terrestrial": 1,
+    "to_satellite": 0
+  }
+}
+```
+
+Inspect with `jq .handover out.json`.
 
 ### Coverage seconds vs percent
 

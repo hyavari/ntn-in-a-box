@@ -5,10 +5,10 @@
    `sudo ./ntnbox run --profile testdata/profiles/leo_pass_90s.yaml -- ./poller` (Linux).
 3. Open `http://localhost:8080/ui` when using the demo script (or `--addr :8080`).
 4. Try a sample below, or drop the GitHub Action into CI.
-5. Optional: `--report out.json` writes a coverage (+ messaging / voice) summary —
-   see [Field-data report](report.md).
+5. Optional: `--report out.json` writes a coverage (+ messaging / voice /
+   handover) summary — see [Field-data report](report.md).
 
-For YAML schedules and blockages, see [Profiles](profiles.md).
+For YAML schedules, blockages, and terrestrial fallback, see [Profiles](profiles.md).
 For orbital TLE, see [TLE](tle.md).
 For what we claim vs 3GPP NTN / 5GAA / CAMARA, see [Standards](standards.md).
 
@@ -36,6 +36,7 @@ the demo script.
 
 Continuous GEO with surprise drops: `./scripts/demo-blockage.sh`
 Voice-grade metrics + call sessions: `./scripts/demo-voice.sh`
+Dual-path cellular↔satellite handover: `./scripts/demo-handover.sh`
 ([Profiles](profiles.md)).
 
 ## TUI dashboard
@@ -66,7 +67,9 @@ The TUI auto-degrades to a stacked layout on terminals narrower than
 (scrolling logs, suitable for CI/piping).
 
 Status labels: **BLOCKED** for blockage drops vs **OUT OF COVERAGE** for
-scheduled gaps ([Profiles](profiles.md)).
+scheduled gaps ([Profiles](profiles.md)). With terrestrial fallback, the
+status adds **· SAT** while on satellite and **via TERR** while the
+default route is terrestrial; a short flash marks each handover.
 
 ## GUI visualization
 
@@ -94,6 +97,7 @@ Features:
 - Responsive: stacks on narrow screens, hides animation on very narrow
 - Works alongside `--tui` — open the GUI in a browser while TUI runs
   in the terminal
+- Dual-path: brief bearer flash on `handover` SSE (sat ↔ terrestrial)
 
 The GUI is embedded in the binary — no separate server or files needed.
 
@@ -172,7 +176,7 @@ runs directly on the host.
 
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `profile` | Yes* | — | Profile name (`leo_pass_90s`, `geo_steady`, `d2c_burst`, `sos_burst`, `sos_hostile`, `geo_blockage`) or path to YAML |
+| `profile` | Yes* | — | Profile name (`leo_pass_90s`, `geo_steady`, `d2c_burst`, `sos_burst`, `sos_hostile`, `geo_blockage`, `geo_blockage_handover`, …) or path to YAML |
 | `command` | Yes | — | Command to run under NTN conditions |
 | `replay` | No* | — | Path to a JSONL recording (overrides `profile`) |
 | `speed` | No | `1` | Replay speed multiplier |

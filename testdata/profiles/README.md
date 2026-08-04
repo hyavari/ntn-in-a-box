@@ -36,6 +36,11 @@ on disk) still loads that file. Keep `testdata/profiles/` and
   vehicle still loses the link — and with no lookahead, so apps must
   recover reactively. Stress-tests reconnect/backoff against surprise
   drops rather than scheduled passes.
+- `geo_blockage_handover.yaml` — same blockage schedule as `geo_blockage`,
+  plus `terrestrial_fallback: true`. While satellite is down, the sandbox
+  switches the default route to a light cellular-ish egress (bearer
+  selection, not RF dual-radio). Demo: `./scripts/demo-handover.sh`.
+  See [Profiles — Terrestrial fallback](../../guides/profiles.md#terrestrial-fallback-dual-egress).
 
 ### Named bearer presets (3GPP-NTN link classes)
 

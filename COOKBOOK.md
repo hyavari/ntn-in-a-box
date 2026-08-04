@@ -123,6 +123,46 @@ Companion: `sendMessage`, `fetchInbox`, `onMessage` / `messageFlow`.
 Starts `serve`, POSTs UE→cloud, polls until `delivered`, exits non-zero on
 failure. Fast profile only (not TLE dual-observer).
 
+### 8. Hybrid cellular + satellite (bearer selection)
+
+Use a profile with `terrestrial_fallback: true` (sample:
+`geo_blockage_handover`). While satellite is down, apps still have a default
+route — treat that as terrestrial, not “hard offline.”
+
+```bash
+./scripts/demo-handover.sh --tui
+curl -s http://127.0.0.1:8080/devices/sandbox-0/condition | jq '{in_coverage, selected_bearer}'
+# SSE: event: handover  →  from/to/reason
+```
+
+With [ntnkit](https://github.com/hyavari/ntnkit):
+
+```ts
+import { ntnboxLinkState, connect, httpTransport } from "@ntnkit/sdk";
+
+const link = ntnboxLinkState({
+  apiBaseUrl: process.env.NTNBOX_API_BASE!,
+  terrestrialFallback: true, // required for dual-path profiles
+});
+
+const client = await connect({
+  autoFlush: true,
+  transport: httpTransport({
+    url: "https://example.com/ingest",
+    linkState: () => link.getLinkState(),
+  }),
+});
+```
+
+`in_coverage: false` + `selected_bearer: "terrestrial"` maps to
+`LinkState.Terrestrial` (Immediate-capable), not `Constrained`. Without the
+flag, the same condition looks like a hard sat outage.
+
+Caveat: this models **route selection**, not RF dual-radio or TCP migration —
+in-flight TCP may reset across a flip. See
+[Profiles](guides/profiles.md#terrestrial-fallback-dual-egress) and
+[API](guides/api.md#condition-get-devicesidcondition).
+
 ## Android companion
 
 See [`android/ntnbox/README.md`](android/ntnbox/README.md): `NtnBoxClient` polls

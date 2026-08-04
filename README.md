@@ -153,12 +153,12 @@ Inputs, replay/record examples: [Getting started](guides/getting-started.md#gith
 | Doc | Use when |
 |-----|----------|
 | [Getting started](guides/getting-started.md) | Demos, TUI/GUI detail, samples, Action, Android |
-| [Profiles](guides/profiles.md) | YAML schema, blockages, out-of-coverage |
+| [Profiles](guides/profiles.md) | YAML schema, blockages, terrestrial fallback |
 | [Report](guides/report.md) | `--report` JSON field-data summary |
 | [Standards](guides/standards.md) | 3GPP NTN / 5GAA / CAMARA framing (what we claim) |
 | [TLE](guides/tle.md) | Orbital TLE generate/run |
-| [Architecture](guides/architecture.md) | Kernel, modules, data flow |
-| [API](guides/api.md) | HTTP endpoints |
+| [Architecture](guides/architecture.md) | Kernel, modules, dual-path, data flow |
+| [API](guides/api.md) | HTTP endpoints, condition + handover SSE |
 | [TUTORIAL.md](TUTORIAL.md) | Step-by-step walkthrough |
 | [COOKBOOK.md](COOKBOOK.md) | Queue flush, burst gates, store-and-forward |
 
@@ -193,8 +193,8 @@ Tag and push — that alone publishes GitHub Release binaries, GHCR
 or smoke-workflow version bumps.
 
 ```
-git tag v0.1.4
-git push origin v0.1.4
+git tag v0.1.7
+git push origin v0.1.7
 ```
 
 ## License

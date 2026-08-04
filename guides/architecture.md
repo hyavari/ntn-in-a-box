@@ -21,10 +21,10 @@ CLI · virtual UE       store-and-forward     REST endpoints
 | `profile` | Parses and validates YAML pass-shape profiles (schedule + piecewise-linear impairment curves) |
 | `condition` | Given a profile + epoch, computes coverage state and interpolated link impairments at any instant |
 | `driver` | Ticks every 250ms, evaluates the Condition Engine, publishes coverage events and link state to the bus |
-| `eventbus` | In-process pub/sub with throttled link-state (>5% delta or 250ms heartbeat) and unthrottled coverage events |
+| `eventbus` | In-process pub/sub with throttled link-state (>5% delta or 250ms heartbeat), unthrottled coverage, and dual-path handover events |
 | `device` | In-memory registry of virtual UEs and real-phone stubs, each associated with a profile |
 | `imsadapter` | Pluggable message delivery backend (mock with failure injection; real IMS later) |
-| `apihost` | HTTP server: health, profiles, devices, condition state, echo |
+| `apihost` | HTTP server: health, profiles, devices, condition (+ bearer/paths), SSE (incl. handover), echo |
 
 ## Dev Sandbox module
 
@@ -33,6 +33,33 @@ CLI · virtual UE       store-and-forward     REST endpoints
 | `devsandbox` | Module implementing the 5-hook contract; receives events, drives the netem shim |
 | `netem` | Translates link-state values into `tc qdisc change` commands inside a network namespace |
 | `netns` | Creates/destroys Linux network namespaces with veth pairs and NAT routing |
+| `path` | Dual-path bearer selection (`satellite` / `terrestrial`) when `terrestrial_fallback` is on |
+
+### Dual-path (terrestrial fallback)
+
+Opt-in via the profile. The namespace gets **two egress veths** (sat
+`10.200.0.0/30`, terr `10.200.1.0/30`). On each satellite coverage edge the
+module reconciles serially: shape sat (fail-closed full loss when leaving;
+restore impairments before return) → `ip route replace default via …` →
+commit bearer → publish `HandoverEvent`.
+
+```
+CoverageEvent (in_coverage, in_blockage)
+        │
+        ▼
+  path.Desired → SetDefaultVia → path.TransitionTo
+        │                              │
+        ▼                              ▼
+   sat/terr netem                 HandoverEvent → bus
+                                        │
+                          ┌─────────────┼─────────────┐
+                          ▼             ▼             ▼
+                       report         SSE           TUI/GUI
+```
+
+`in_coverage` stays satellite truth; `selected_bearer` is the live default
+route. Details: [Profiles](profiles.md#terrestrial-fallback-dual-egress),
+[API](api.md#condition-get-devicesidcondition).
 
 ## Data flow
 
