@@ -152,15 +152,19 @@ func (l *Loop) tick() {
 		l.prevInCoverage = cov.InCoverage
 		if cov.InCoverage {
 			l.bus.PublishCoverageEvent(eventbus.CoverageEvent{
-				Kind:     eventbus.KindWindowOpened,
-				At:       now,
-				DeviceID: l.deviceID,
+				Kind:       eventbus.KindWindowOpened,
+				At:         now,
+				DeviceID:   l.deviceID,
+				InCoverage: true,
+				InBlockage: cov.InBlockage,
 			})
 		} else {
 			l.bus.PublishCoverageEvent(eventbus.CoverageEvent{
-				Kind:     eventbus.KindWindowClosed,
-				At:       now,
-				DeviceID: l.deviceID,
+				Kind:       eventbus.KindWindowClosed,
+				At:         now,
+				DeviceID:   l.deviceID,
+				InCoverage: false,
+				InBlockage: cov.InBlockage,
 			})
 		}
 	} else if cov.InCoverage != l.prevInCoverage {
@@ -168,17 +172,21 @@ func (l *Loop) tick() {
 		l.prevInCoverage = cov.InCoverage
 		if cov.InCoverage {
 			l.bus.PublishCoverageEvent(eventbus.CoverageEvent{
-				Kind:     eventbus.KindWindowOpened,
-				At:       now,
-				DeviceID: l.deviceID,
+				Kind:       eventbus.KindWindowOpened,
+				At:         now,
+				DeviceID:   l.deviceID,
+				InCoverage: true,
+				InBlockage: cov.InBlockage,
 			})
 			l.lookaheadOpenFired = false
 			l.lookaheadCloseFired = false
 		} else {
 			l.bus.PublishCoverageEvent(eventbus.CoverageEvent{
-				Kind:     eventbus.KindWindowClosed,
-				At:       now,
-				DeviceID: l.deviceID,
+				Kind:       eventbus.KindWindowClosed,
+				At:         now,
+				DeviceID:   l.deviceID,
+				InCoverage: false,
+				InBlockage: cov.InBlockage,
 			})
 			l.lookaheadOpenFired = false
 			l.lookaheadCloseFired = false
@@ -190,17 +198,21 @@ func (l *Loop) tick() {
 		if cov.InCoverage && !l.lookaheadCloseFired && cov.UntilNextTransitionSec <= l.lookaheadSec {
 			l.lookaheadCloseFired = true
 			l.bus.PublishCoverageEvent(eventbus.CoverageEvent{
-				Kind:     eventbus.KindWindowClosing,
-				At:       now,
-				DeviceID: l.deviceID,
+				Kind:       eventbus.KindWindowClosing,
+				At:         now,
+				DeviceID:   l.deviceID,
+				InCoverage: true,
+				InBlockage: cov.InBlockage,
 			})
 		}
 		if !cov.InCoverage && !l.lookaheadOpenFired && cov.UntilNextTransitionSec <= l.lookaheadSec {
 			l.lookaheadOpenFired = true
 			l.bus.PublishCoverageEvent(eventbus.CoverageEvent{
-				Kind:     eventbus.KindWindowOpening,
-				At:       now,
-				DeviceID: l.deviceID,
+				Kind:       eventbus.KindWindowOpening,
+				At:         now,
+				DeviceID:   l.deviceID,
+				InCoverage: false,
+				InBlockage: cov.InBlockage,
 			})
 		}
 	}

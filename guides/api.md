@@ -34,7 +34,7 @@ Adaptation patterns (queue flush, burst gates, lead_sec, store-and-forward):
 | POST | `/devices` | Register a device (`{id, type, profile_name}`) |
 | GET | `/devices` | List registered devices |
 | GET | `/devices/{id}` | Get a device |
-| GET | `/devices/{id}/condition` | Current coverage + link state |
+| GET | `/devices/{id}/condition` | Current coverage + link state; with terrestrial fallback also `selected_bearer` + `paths` |
 | GET | `/devices/{id}/lookahead` | Next open/close times, window duration, elev (TLE); `?lead_sec=` advisory |
 | GET | `/devices/{id}/capabilities` | Satellite capability discovery (`voice` for lband_geo / geo_steady / geo_blockage) |
 | POST | `/devices/{id}/call-events` | Voice call telemetry ingest (`{id, status}`: started\|completed\|dropped) — not a full Voice API |
@@ -42,5 +42,5 @@ Adaptation patterns (queue flush, burst gates, lead_sec, store-and-forward):
 | GET | `/devices/{id}/messages` | Delivered inbox (oldest-first); `cloud` is a synthetic recipient |
 | GET | `/messages/{mid}` | Message lifecycle status |
 | GET | `/sandbox/status` | Current shaping values (Dev Sandbox) |
-| GET | `/events` | SSE: coverage, link-state, message, … |
+| GET | `/events` | SSE: coverage, link-state, handover, message, … |
 | GET | `/ui/` | Web GUI (satellite pass visualization) |

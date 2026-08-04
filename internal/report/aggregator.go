@@ -68,6 +68,11 @@ type Aggregator struct {
 	msgStatus  map[string]string
 	callStatus map[string]string
 
+	handoverCapable bool
+	handoverCount   int
+	handoverToTerr  int
+	handoverToSat   int
+
 	// Voice estimates: exact running means over all samples; percentiles from
 	// a fixed ring (last voiceRingCap in-coverage samples).
 	voiceCount  int
@@ -78,11 +83,12 @@ type Aggregator struct {
 	voiceRingI  int // next write index
 	voiceRingN  int // how many slots filled (≤ cap)
 
-	unsubCov  func()
-	unsubMsg  func()
-	unsubCall func()
-	stopTick  chan struct{}
-	tickDone  chan struct{}
+	unsubCov      func()
+	unsubMsg      func()
+	unsubCall     func()
+	unsubHandover func()
+	stopTick      chan struct{}
+	tickDone      chan struct{}
 }
 
 // voiceRingCap bounds percentile sample memory (~1h at 1 Hz).
@@ -90,13 +96,14 @@ const voiceRingCap = 3600
 
 // Config wires a new Aggregator.
 type Config struct {
-	Bus          *eventbus.Bus
-	Sampler      Sampler
-	Profile      string
-	DeviceID     string // primary device filter; empty = accept all
-	Start        time.Time
-	TickEvery    time.Duration // default 1s; 0 → 1s; negative disables ticker (tests)
-	VoiceCapable bool
+	Bus             *eventbus.Bus
+	Sampler         Sampler
+	Profile         string
+	DeviceID        string // primary device filter; empty = accept all
+	Start           time.Time
+	TickEvery       time.Duration // default 1s; 0 → 1s; negative disables ticker (tests)
+	VoiceCapable    bool
+	HandoverCapable bool // terrestrial_fallback enabled for this run
 }
 
 // New starts subscriptions and an optional ticker. Call Close then Finalize.
@@ -111,14 +118,15 @@ func New(cfg Config) *Aggregator {
 	}
 
 	a := &Aggregator{
-		profile:      cfg.Profile,
-		deviceID:     cfg.DeviceID,
-		sampler:      cfg.Sampler,
-		voiceCapable: cfg.VoiceCapable,
-		startedAt:    start,
-		segmentStart: start,
-		msgStatus:    make(map[string]string),
-		callStatus:   make(map[string]string),
+		profile:         cfg.Profile,
+		deviceID:        cfg.DeviceID,
+		sampler:         cfg.Sampler,
+		voiceCapable:    cfg.VoiceCapable,
+		handoverCapable: cfg.HandoverCapable,
+		startedAt:       start,
+		segmentStart:    start,
+		msgStatus:       make(map[string]string),
+		callStatus:      make(map[string]string),
 	}
 	if ls, ok := cfg.Sampler.(LinkSampler); ok {
 		a.linkSampler = ls
@@ -133,6 +141,7 @@ func New(cfg Config) *Aggregator {
 		a.unsubCov = cfg.Bus.SubscribeCoverage(a.onCoverage)
 		a.unsubMsg = cfg.Bus.SubscribeMessage(a.onMessage)
 		a.unsubCall = cfg.Bus.SubscribeCall(a.onCall)
+		a.unsubHandover = cfg.Bus.SubscribeHandover(a.onHandover)
 	}
 
 	if tickEvery > 0 && cfg.Sampler != nil {
@@ -151,9 +160,11 @@ func (a *Aggregator) Close() {
 	unsubCov := a.unsubCov
 	unsubMsg := a.unsubMsg
 	unsubCall := a.unsubCall
+	unsubHandover := a.unsubHandover
 	a.unsubCov = nil
 	a.unsubMsg = nil
 	a.unsubCall = nil
+	a.unsubHandover = nil
 	a.mu.Unlock()
 
 	if stop != nil {
@@ -168,6 +179,9 @@ func (a *Aggregator) Close() {
 	}
 	if unsubCall != nil {
 		unsubCall()
+	}
+	if unsubHandover != nil {
+		unsubHandover()
 	}
 }
 
@@ -205,6 +219,7 @@ func (a *Aggregator) Finalize(end time.Time) Report {
 		},
 		Messaging: a.messagingLocked(),
 		Voice:     a.voiceLocked(),
+		Handover:  a.handoverLocked(),
 	}
 	if dur > 0 {
 		r.Coverage.InPct = 100 * a.inSec / dur
@@ -212,6 +227,36 @@ func (a *Aggregator) Finalize(end time.Time) Report {
 		r.Coverage.OutPct = 100 * a.outSec / dur
 	}
 	return r
+}
+
+func (a *Aggregator) onHandover(ev eventbus.HandoverEvent) {
+	if a.deviceID != "" && ev.DeviceID != "" && ev.DeviceID != a.deviceID {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.finalized || !a.handoverCapable {
+		return
+	}
+	a.handoverCount++
+	switch ev.To {
+	case "terrestrial":
+		a.handoverToTerr++
+	case "satellite":
+		a.handoverToSat++
+	}
+}
+
+func (a *Aggregator) handoverLocked() HandoverStats {
+	if !a.handoverCapable {
+		return HandoverStats{Present: false}
+	}
+	return HandoverStats{
+		Present:       true,
+		Count:         a.handoverCount,
+		ToTerrestrial: a.handoverToTerr,
+		ToSatellite:   a.handoverToSat,
+	}
 }
 
 func (a *Aggregator) tickLoop(every time.Duration) {

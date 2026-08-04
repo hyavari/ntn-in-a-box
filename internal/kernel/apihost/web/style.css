@@ -271,6 +271,15 @@ body {
     color: #f87171;
 }
 
+.coverage-indicator.flash {
+    animation: coverage-flash 0.85s ease-out;
+}
+
+@keyframes coverage-flash {
+    0% { background: rgba(250, 204, 21, 0.45); }
+    100% { background: transparent; }
+}
+
 .profile-name {
     color: #64748b;
     font-size: 11px;

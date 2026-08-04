@@ -30,6 +30,10 @@ type Config struct {
 	// device (e.g. "sandbox-0") so peer TLE observers do not thrash the panel.
 	FocusDeviceID string
 
+	// SelectedBearer seeds dual-path status ("satellite" | "terrestrial").
+	// Empty when terrestrial fallback is off.
+	SelectedBearer string
+
 	// DeviceIDs is the cycle order for `d` focus switching. Length < 2 disables.
 	DeviceIDs []string
 
@@ -56,6 +60,7 @@ func Run(ctx context.Context, cfg Config) error {
 	model.addr = cfg.Addr
 	model.isReplay = cfg.IsReplay
 	model.focusDeviceID = cfg.FocusDeviceID
+	model.selectedBearer = cfg.SelectedBearer
 	model.deviceIDs = append([]string(nil), cfg.DeviceIDs...)
 
 	// Holder lets the adapter bind before tea.Program exists, then
@@ -102,9 +107,11 @@ func Run(ctx context.Context, cfg Config) error {
 	unsubCoverage := cfg.Bus.SubscribeCoverage(adapter.OnCoverage)
 	unsubLinkState := cfg.Bus.SubscribeLinkState(adapter.OnLinkState)
 	unsubMessage := cfg.Bus.SubscribeMessage(adapter.OnMessage)
+	unsubHandover := cfg.Bus.SubscribeHandover(adapter.OnHandover)
 	defer unsubCoverage()
 	defer unsubLinkState()
 	defer unsubMessage()
+	defer unsubHandover()
 
 	// Notify caller with the Sender *before* starting the child so
 	// any goroutines it launches (e.g. the replayer) are guaranteed

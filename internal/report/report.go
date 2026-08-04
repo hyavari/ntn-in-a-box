@@ -17,6 +17,24 @@ type Report struct {
 	Coverage    CoverageStats  `json:"coverage"`
 	Messaging   MessagingStats `json:"messaging"`
 	Voice       VoiceStats     `json:"voice"`
+	Handover    HandoverStats  `json:"handover"`
+}
+
+// HandoverStats summarize bearer switches when terrestrial fallback is enabled.
+type HandoverStats struct {
+	Present       bool `json:"present"`
+	Count         int  `json:"count"`
+	ToTerrestrial int  `json:"to_terrestrial"`
+	ToSatellite   int  `json:"to_satellite"`
+}
+
+// MarshalJSON collapses idle handover to {"present":false}.
+func (h HandoverStats) MarshalJSON() ([]byte, error) {
+	if !h.Present {
+		return []byte(`{"present":false}`), nil
+	}
+	type full HandoverStats
+	return json.Marshal(full(h))
 }
 
 // CoverageStats are wall-clock coverage buckets for the run.

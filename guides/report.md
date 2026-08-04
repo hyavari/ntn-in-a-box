@@ -34,9 +34,15 @@ stderr summary.
 | `voice.calls.present` | `false` unless call-event telemetry was ingested |
 | `voice.calls.attempted` / `completed` / `dropped` / `open` | Latest status per call id (`open` = in-flight / `started`) |
 | `voice.calls.completion_rate` / `drop_on_close_rate` | Rates over attempted |
+| `handover.present` | `true` when the profile enabled `terrestrial_fallback` |
+| `handover.count` | Total bearer switches during the run |
+| `handover.to_terrestrial` / `to_satellite` | Direction tallies |
 
 Call session stats are included whenever call-events were ingested, even if
 `voice.capable` is false (no link-derived estimates in that case).
+
+Handover tallies appear only for dual-path (`terrestrial_fallback`) runs;
+otherwise `handover` is `{ "present": false }`.
 
 ### Coverage seconds vs percent
 

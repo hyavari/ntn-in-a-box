@@ -38,6 +38,7 @@ type CoverageEvent struct {
 	// Optional pre-computed state (used by replay mode when no
 	// evaluator is available). Zero values mean "not provided."
 	InCoverage          bool
+	InBlockage          bool // true when outage is a blockage (not schedule gap)
 	ElapsedSec          float64
 	UntilNextTransition float64
 }
@@ -79,6 +80,19 @@ type CallEvent struct {
 
 // CallHandler is called for every published CallEvent.
 type CallHandler func(CallEvent)
+
+// HandoverEvent is published when the selected egress bearer changes
+// (satellite ↔ terrestrial) on a dual-path sandbox.
+type HandoverEvent struct {
+	DeviceID string
+	From     string // "satellite" | "terrestrial"
+	To       string
+	Reason   string
+	At       time.Time
+}
+
+// HandoverHandler is called for every published HandoverEvent.
+type HandoverHandler func(HandoverEvent)
 
 // ObservabilityEvent is a generic, unthrottled event for metrics/
 // tracing — the "emit" hook in the module contract.

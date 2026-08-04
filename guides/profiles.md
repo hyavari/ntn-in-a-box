@@ -73,16 +73,45 @@ Try it (macOS or Linux):
 ## Out-of-coverage behavior
 
 When coverage is lost — a scheduled window close **or** an unscheduled
-blockage — the Dev Sandbox sets 100% packet loss: packets silently drop,
-mimicking real satellite behavior (the signal disappears without sending
-ICMP unreachable or RST). Apps must detect the outage via timeouts.
-The TUI/GUI label **BLOCKED** for blockage drops vs **OUT OF COVERAGE**
-for scheduled gaps.
+blockage — the Dev Sandbox sets 100% packet loss on the satellite path:
+packets silently drop, mimicking real satellite behavior (the signal
+disappears without sending ICMP unreachable or RST). Apps must detect the
+outage via timeouts. The TUI/GUI label **BLOCKED** for blockage drops vs
+**OUT OF COVERAGE** for scheduled gaps.
+
+### Terrestrial fallback (dual egress)
+
+Opt-in per profile. When enabled, the sandbox creates a second egress
+(terrestrial) and switches the **default route** away from satellite while
+satellite coverage is down. New traffic keeps flowing on a light
+cellular-ish path. This models bearer selection, not RF dual-radio or
+TCP connection migration (in-flight TCP may reset across a route flip).
+
+```yaml
+terrestrial_fallback: true
+terrestrial:                 # optional; defaults shown
+  delay_ms: 30
+  jitter_ms: 5
+  loss_pct: 0.1
+  bandwidth_kbps: 10000
+```
+
+Sample: [`geo_blockage_handover`](../testdata/profiles/geo_blockage_handover.yaml)
+(also embedded as `--profile geo_blockage_handover`).
+
+```bash
+./scripts/demo-handover.sh
+./scripts/demo-handover.sh --report out.json
+```
+
+`GET /devices/{id}/condition` keeps `in_coverage` as **satellite** truth and
+adds `selected_bearer` + `paths` when fallback is on. SSE emits `handover`
+events on each switch.
 
 ## Sample profiles
 
 `leo_pass_90s`, `geo_steady`, `d2c_burst`, `sos_burst`, `sos_hostile`,
-`geo_blockage`.
+`geo_blockage`, `geo_blockage_handover`.
 
 ### Named bearer presets
 

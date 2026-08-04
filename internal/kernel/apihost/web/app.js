@@ -14,6 +14,8 @@ const state = {
     // blockage-relative while blocked).
     cyclePosSec: 0,
     inBlockage: false,
+    // Dual-path: "satellite" | "terrestrial" when terrestrial_fallback is on.
+    selectedBearer: '',
     windowSec: 90,
     periodSec: 600,
     lookaheadSec: 30,
@@ -196,6 +198,18 @@ function connect() {
             updateMessageExplain();
         }
         activateView(info);
+    });
+
+    es.addEventListener('handover', (e) => {
+        const data = JSON.parse(e.data);
+        if (data.device_id && data.device_id !== state.focusDeviceId) {
+            return;
+        }
+        if (data.to === 'satellite' || data.to === 'terrestrial') {
+            state.selectedBearer = data.to;
+            updateCoverageStatus();
+            flashCoverageIndicator();
+        }
     });
 
     es.addEventListener('coverage', (e) => {
@@ -748,19 +762,52 @@ function updateScheduleLabels() {
     }
 }
 
+function bearerLabel() {
+    if (state.selectedBearer === 'satellite') return ' · SAT';
+    if (state.selectedBearer === 'terrestrial') return ' · TERR';
+    return '';
+}
+
 function updateCoverageStatus() {
     const who = state.focusDeviceId || 'device';
+    const viaTerr = state.selectedBearer === 'terrestrial';
     if (state.inCoverage) {
-        els.coverageIndicator.textContent = `▲ ${who} IN COVERAGE`;
+        els.coverageIndicator.textContent = `▲ ${who} IN COVERAGE${bearerLabel()}`;
         els.coverageIndicator.classList.remove('out');
     } else if (state.inBlockage) {
-        els.coverageIndicator.textContent = `▼ ${who} BLOCKED`;
+        const label = viaTerr ? 'BLOCKED · via TERR' : `BLOCKED${bearerLabel()}`;
+        els.coverageIndicator.textContent = `▼ ${who} ${label}`;
         els.coverageIndicator.classList.add('out');
     } else {
-        els.coverageIndicator.textContent = `▼ ${who} OUT OF COVERAGE`;
+        const label = viaTerr ? 'OUT · via TERR' : `OUT OF COVERAGE${bearerLabel()}`;
+        els.coverageIndicator.textContent = `▼ ${who} ${label}`;
         els.coverageIndicator.classList.add('out');
     }
     els.countdown.textContent = `${Math.round(state.untilNext)}s remaining`;
+}
+
+function flashCoverageIndicator() {
+    if (!els.coverageIndicator) return;
+    els.coverageIndicator.classList.remove('flash');
+    // Restart animation if a flash is already in progress.
+    void els.coverageIndicator.offsetWidth;
+    els.coverageIndicator.classList.add('flash');
+    setTimeout(() => els.coverageIndicator.classList.remove('flash'), 900);
+}
+
+async function seedSelectedBearer() {
+    const id = state.focusDeviceId || 'sandbox-0';
+    try {
+        const resp = await fetch(`/devices/${encodeURIComponent(id)}/condition`);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (data.selected_bearer === 'satellite' || data.selected_bearer === 'terrestrial') {
+            state.selectedBearer = data.selected_bearer;
+            updateCoverageStatus();
+        }
+    } catch {
+        // ignore — SSE handover will update when available
+    }
 }
 
 function updateMetrics() {
@@ -1004,6 +1051,7 @@ setTimeout(async () => {
 
 fetchProfile();
 connect();
+seedSelectedBearer();
 refreshPeerDevices();
 setInterval(refreshPeerDevices, 2000);
 setInterval(pollPeerCondition, 1000);

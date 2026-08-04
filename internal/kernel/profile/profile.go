@@ -81,6 +81,38 @@ type Blockage struct {
 	DurationSec float64 `yaml:"duration_sec"`
 }
 
+// TerrestrialImpairments are fixed link values applied on the terrestrial
+// egress when TerrestrialFallback is enabled.
+//
+// LossPct is a pointer so YAML can distinguish omit (nil → default) from an
+// explicit 0 (zero loss).
+type TerrestrialImpairments struct {
+	DelayMs       float64  `yaml:"delay_ms"`
+	JitterMs      float64  `yaml:"jitter_ms"`
+	LossPct       *float64 `yaml:"loss_pct"`
+	BandwidthKbps float64  `yaml:"bandwidth_kbps"`
+}
+
+// LossPctValue returns the configured loss percentage, or 0 if unset.
+func (t TerrestrialImpairments) LossPctValue() float64 {
+	if t.LossPct == nil {
+		return 0
+	}
+	return *t.LossPct
+}
+
+// DefaultTerrestrialImpairments is the light cellular-ish preset used when
+// terrestrial_fallback is true and terrestrial fields are omitted or zero.
+func DefaultTerrestrialImpairments() TerrestrialImpairments {
+	loss := 0.1
+	return TerrestrialImpairments{
+		DelayMs:       30,
+		JitterMs:      5,
+		LossPct:       &loss,
+		BandwidthKbps: 10000,
+	}
+}
+
 // Profile is a named pass-shape profile: a coverage schedule plus the
 // impairment curves that apply while in coverage.
 //
@@ -89,10 +121,16 @@ type Blockage struct {
 // profiles (modeling a moving vehicle on an always-in-view GEO link) but
 // are permitted on any mode; on a periodic profile they only take effect
 // while a window would otherwise be open.
+//
+// When TerrestrialFallback is true, the Dev Sandbox creates a second egress
+// path and switches the default route to terrestrial while satellite
+// coverage is down (scheduled gap or blockage).
 type Profile struct {
-	Name        string     `yaml:"name"`
-	Description string     `yaml:"description"`
-	Schedule    Schedule   `yaml:"schedule"`
-	Curves      Curves     `yaml:"curves"`
-	Blockages   []Blockage `yaml:"blockages"`
+	Name                string                 `yaml:"name"`
+	Description         string                 `yaml:"description"`
+	Schedule            Schedule               `yaml:"schedule"`
+	Curves              Curves                 `yaml:"curves"`
+	Blockages           []Blockage             `yaml:"blockages"`
+	TerrestrialFallback bool                   `yaml:"terrestrial_fallback"`
+	Terrestrial         TerrestrialImpairments `yaml:"terrestrial"`
 }

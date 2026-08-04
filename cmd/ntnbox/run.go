@@ -207,9 +207,19 @@ func runRun(args []string) error {
 
 	bus := eventbus.New(eventbus.DefaultLinkStateThrottle)
 
+	fallback := p != nil && p.TerrestrialFallback
+	var terrImp profile.TerrestrialImpairments
+	if fallback {
+		terrImp = p.Terrestrial
+	}
+
 	// Create namespace.
 	nsExec := netns.ExecReal{}
 	ns := netns.New("sandbox-0", nsExec)
+	if fallback {
+		ns.EnableTerrestrial()
+		fmt.Fprintf(os.Stderr, "ntnbox: terrestrial fallback enabled (dual egress)\n")
+	}
 
 	fmt.Fprintf(os.Stderr, "ntnbox: creating network namespace %s\n", ns.Name)
 	if err := ns.Create(ctx); err != nil {
@@ -220,11 +230,12 @@ func runRun(args []string) error {
 		_ = ns.Destroy(context.Background())
 	}()
 
-	// Create netem controller for the namespace.
+	// Create netem controller for the satellite path.
 	netemCtrl := &netem.Controller{
-		Netns:  ns.Name,
-		Device: ns.VethInner,
-		Exec:   netem.ExecReal{},
+		Netns:           ns.Name,
+		Device:          ns.VethInner,
+		ControlExemptIP: ns.SatGateway(),
+		Exec:            netem.ExecReal{},
 	}
 
 	// Set up initial qdisc with the initial link state values.
@@ -232,9 +243,21 @@ func runRun(args []string) error {
 		return fmt.Errorf("setting up netem: %w", err)
 	}
 
+	opts, err := setupDualPath(ctx, ns, bus, terrImp, fallback)
+	if err != nil {
+		return err
+	}
+
 	// Create Dev Sandbox module.
-	sandbox := devsandbox.New(netemCtrl)
+	sandbox := devsandbox.NewWithOptions(netemCtrl, opts)
 	sandbox.Emit(bus)
+
+	if fallback {
+		_, cov := eval.Evaluate(time.Now())
+		if err := sandbox.InitBearer(cov.InCoverage); err != nil {
+			return err
+		}
+	}
 
 	// Subscribe module to bus events.
 	bus.SubscribeCoverage(sandbox.OnCoverageEvent)
@@ -274,12 +297,13 @@ func runRun(args []string) error {
 			primaryID = deviceEvals[0].id
 		}
 		agg := report.New(report.Config{
-			Bus:          bus,
-			Sampler:      report.EvalSampler{Eval: eval},
-			Profile:      profileName,
-			DeviceID:     primaryID,
-			Start:        time.Now().UTC(),
-			VoiceCapable: voice.ProfileCapable(profileName),
+			Bus:             bus,
+			Sampler:         report.EvalSampler{Eval: eval},
+			Profile:         profileName,
+			DeviceID:        primaryID,
+			Start:           time.Now().UTC(),
+			VoiceCapable:    voice.ProfileCapable(profileName),
+			HandoverCapable: fallback,
 		})
 		path := *reportPath
 		defer func() {
@@ -322,6 +346,21 @@ func runRun(args []string) error {
 			for _, de := range deviceEvals {
 				srv.RegisterEvaluator(de.id, de.eval)
 			}
+		}
+		if fallback {
+			srv.SetPathInfoFunc(func(deviceID string) (apihost.PathInfo, bool) {
+				if deviceID != "" && deviceID != "sandbox-0" {
+					return apihost.PathInfo{}, false
+				}
+				bearer := sandbox.SelectedBearer()
+				if bearer == "" {
+					return apihost.PathInfo{}, false
+				}
+				return apihost.PathInfo{
+					SelectedBearer: bearer,
+					Terrestrial:    terrImp,
+				}, true
+			})
 		}
 		sandbox.RegisterRoutes(srv)
 		// Late POST /devices need their own driver so messaging can flush on window_opened.
@@ -417,13 +456,14 @@ func runRun(args []string) error {
 			}
 		}
 		return ntntui.Run(ctx, ntntui.Config{
-			Bus:           bus,
-			Evaluator:     eval,
-			Profile:       tuiProfile,
-			Addr:          *addr,
-			FocusDeviceID: focusID,
-			DeviceIDs:     deviceIDs,
-			Evals:         evals,
+			Bus:            bus,
+			Evaluator:      eval,
+			Profile:        tuiProfile,
+			Addr:           *addr,
+			FocusDeviceID:  focusID,
+			SelectedBearer: sandbox.SelectedBearer(),
+			DeviceIDs:      deviceIDs,
+			Evals:          evals,
 			CmdFn: func() *exec.Cmd {
 				cmd := ns.Command(cmdArgs[0], cmdArgs[1:]...)
 				if apiBase != "" {

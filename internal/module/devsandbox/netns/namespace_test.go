@@ -107,6 +107,42 @@ func TestDestroy(t *testing.T) {
 	}
 }
 
+func TestCreateDualPath(t *testing.T) {
+	mock := &mockExec{}
+	ns := New("sandbox-0", mock)
+	ns.EnableTerrestrial()
+
+	if !ns.DualPath() {
+		t.Fatal("expected dual path")
+	}
+	if err := ns.Create(context.Background()); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	cmds := mock.all()
+	joined := strings.Join(cmds, "\n")
+	if !strings.Contains(joined, "10.200.1.0/30") {
+		t.Fatalf("missing terrestrial NAT:\n%s", joined)
+	}
+	if !strings.Contains(joined, ns.TerrVethOuter) {
+		t.Fatalf("missing terr outer veth:\n%s", joined)
+	}
+}
+
+func TestSetDefaultVia(t *testing.T) {
+	mock := &mockExec{}
+	ns := New("ue-1", mock)
+	if err := ns.SetDefaultVia(context.Background(), "10.200.1.1"); err != nil {
+		t.Fatalf("SetDefaultVia: %v", err)
+	}
+	cmds := mock.all()
+	if len(cmds) != 1 {
+		t.Fatalf("got %d cmds, want 1:\n%s", len(cmds), strings.Join(cmds, "\n"))
+	}
+	if !strings.Contains(cmds[0], "route replace default via 10.200.1.1") {
+		t.Errorf("cmd[0] = %s", cmds[0])
+	}
+}
+
 func TestCommand(t *testing.T) {
 	mock := &mockExec{}
 	ns := New("ue-1", mock)

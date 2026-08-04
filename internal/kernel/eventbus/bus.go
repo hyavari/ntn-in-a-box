@@ -26,6 +26,7 @@ type Bus struct {
 	positionSubs      []*SatellitePositionHandler
 	messageSubs       []*MessageHandler
 	callSubs          []*CallHandler
+	handoverSubs      []*HandoverHandler
 
 	throttle LinkStateThrottle
 	// Per-device link-state throttle (empty DeviceID uses key "").
@@ -214,6 +215,36 @@ func (b *Bus) PublishCall(ev CallEvent) {
 	b.mu.Lock()
 	subs := make([]*CallHandler, len(b.callSubs))
 	copy(subs, b.callSubs)
+	b.mu.Unlock()
+
+	for _, p := range subs {
+		(*p)(ev)
+	}
+}
+
+// SubscribeHandover registers h for HandoverEvent publications.
+func (b *Bus) SubscribeHandover(h HandoverHandler) func() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	ptr := &h
+	b.handoverSubs = append(b.handoverSubs, ptr)
+	return func() {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		for i, p := range b.handoverSubs {
+			if p == ptr {
+				b.handoverSubs = append(b.handoverSubs[:i], b.handoverSubs[i+1:]...)
+				return
+			}
+		}
+	}
+}
+
+// PublishHandover notifies all handover subscribers. Never throttled.
+func (b *Bus) PublishHandover(ev HandoverEvent) {
+	b.mu.Lock()
+	subs := make([]*HandoverHandler, len(b.handoverSubs))
+	copy(subs, b.handoverSubs)
 	b.mu.Unlock()
 
 	for _, p := range subs {

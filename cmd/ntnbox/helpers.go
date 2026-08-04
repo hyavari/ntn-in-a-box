@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -13,8 +14,49 @@ import (
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/eventbus"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/imsadapter"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/profile"
+	"github.com/hyavari/ntn-in-a-box/internal/module/devsandbox"
+	"github.com/hyavari/ntn-in-a-box/internal/module/devsandbox/netem"
+	"github.com/hyavari/ntn-in-a-box/internal/module/devsandbox/netns"
+	"github.com/hyavari/ntn-in-a-box/internal/module/devsandbox/path"
 	"github.com/hyavari/ntn-in-a-box/internal/module/messaging"
 )
+
+// setupDualPath configures the terrestrial netem path and returns sandbox
+// options. When fallback is false, returns empty options.
+func setupDualPath(
+	ctx context.Context,
+	ns *netns.Namespace,
+	bus *eventbus.Bus,
+	terrImp profile.TerrestrialImpairments,
+	fallback bool,
+) (devsandbox.Options, error) {
+	if !fallback {
+		return devsandbox.Options{}, nil
+	}
+	terrCtrl := &netem.Controller{
+		Netns:           ns.Name,
+		Device:          ns.TerrVethInner,
+		ControlExemptIP: ns.TerrGateway(),
+		Exec:            netem.ExecReal{},
+	}
+	terrState := condition.LinkState{
+		DelayMs:       terrImp.DelayMs,
+		JitterMs:      terrImp.JitterMs,
+		LossPct:       terrImp.LossPctValue(),
+		BandwidthKbps: terrImp.BandwidthKbps,
+	}
+	if err := terrCtrl.Setup(ctx, terrState); err != nil {
+		return devsandbox.Options{}, fmt.Errorf("setting up terrestrial netem: %w", err)
+	}
+	return devsandbox.Options{
+		Router:      ns,
+		Paths:       path.New(true),
+		Bus:         bus,
+		DeviceID:    "sandbox-0",
+		SatGateway:  ns.SatGateway(),
+		TerrGateway: ns.TerrGateway(),
+	}, nil
+}
 
 // newAPIHost builds the API server (messaging wired) but does not listen yet.
 // Callers must set OnDeviceRegistered (if needed) before listenAPIHost so

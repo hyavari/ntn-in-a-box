@@ -72,9 +72,12 @@ func (a *Adapter) OnCoverage(ev eventbus.CoverageEvent) {
 		msg.UntilNextTransition = cov.UntilNextTransitionSec
 		msg.CyclePosSec = cov.CyclePosSec
 		msg.InBlockage = cov.InBlockage
-	} else if msg.ElapsedSec == 0 && msg.UntilNextTransition == 0 {
-		// Fallback: derive InCoverage from event kind.
-		msg.InCoverage = ev.Kind == eventbus.KindWindowOpened || ev.Kind == eventbus.KindWindowOpening
+	} else {
+		msg.InBlockage = ev.InBlockage
+		if msg.ElapsedSec == 0 && msg.UntilNextTransition == 0 {
+			// Fallback: derive InCoverage from event kind.
+			msg.InCoverage = ev.Kind == eventbus.KindWindowOpened || ev.Kind == eventbus.KindWindowOpening
+		}
 	}
 	a.sender.Send(msg)
 }
@@ -98,5 +101,19 @@ func (a *Adapter) OnMessage(ev eventbus.MessageEvent) {
 		To:     ev.To,
 		Status: ev.Status,
 		At:     ev.At,
+	})
+}
+
+// OnHandover is a HandoverHandler that forwards bearer switches.
+func (a *Adapter) OnHandover(ev eventbus.HandoverEvent) {
+	if !a.acceptDevice(ev.DeviceID) {
+		return
+	}
+	a.sender.Send(HandoverMsg{
+		From:     ev.From,
+		To:       ev.To,
+		Reason:   ev.Reason,
+		DeviceID: ev.DeviceID,
+		At:       ev.At,
 	})
 }

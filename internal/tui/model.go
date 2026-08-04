@@ -45,6 +45,10 @@ type Model struct {
 	// blockage (vs a scheduled periodic gap).
 	inBlockage bool
 
+	// selectedBearer is "satellite" | "terrestrial" when dual-path
+	// fallback is enabled; empty otherwise.
+	selectedBearer string
+
 	// Link metrics.
 	linkState condition.LinkState
 	hasLink   bool
@@ -162,6 +166,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewport.SetContent(m.renderOutputContent())
 				m.viewport.GotoBottom()
 			}
+		}
+
+	case HandoverMsg:
+		if msg.To != "" {
+			m.selectedBearer = msg.To
 		}
 
 	case LinkStateMsg:

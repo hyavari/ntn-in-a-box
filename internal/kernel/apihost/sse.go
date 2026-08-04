@@ -1,6 +1,7 @@
 package apihost
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -10,6 +11,25 @@ import (
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/condition"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/eventbus"
 )
+
+// sseEnqueueDrop sends msg if the channel has room; otherwise drops it.
+func sseEnqueueDrop(ch chan<- []byte, msg []byte) {
+	select {
+	case ch <- msg:
+	default:
+	}
+}
+
+// sseEnqueueReliable delivers msg eventually or until the client disconnects.
+// Used for rare, must-not-lose events (handover).
+func sseEnqueueReliable(ctx context.Context, ch chan<- []byte, msg []byte) {
+	go func() {
+		select {
+		case ch <- msg:
+		case <-ctx.Done():
+		}
+	}()
+}
 
 // sseEvent is the JSON payload for an SSE event.
 type sseCoverageEvent struct {
@@ -55,6 +75,8 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
+	clientCtx := r.Context()
+
 	// Buffered channel to decouple bus callbacks from the write loop.
 	ch := make(chan []byte, 64)
 
@@ -79,9 +101,12 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			payload.UntilNextTransition = cov.UntilNextTransitionSec
 			payload.CyclePosSec = cov.CyclePosSec
 			payload.InBlockage = cov.InBlockage
-		} else if payload.ElapsedSec == 0 && payload.UntilNextTransition == 0 {
-			// Fallback: derive from event kind.
-			payload.InCoverage = ev.Kind == eventbus.KindWindowOpened || ev.Kind == eventbus.KindWindowOpening
+		} else {
+			payload.InBlockage = ev.InBlockage
+			if payload.ElapsedSec == 0 && payload.UntilNextTransition == 0 {
+				// Fallback: derive from event kind.
+				payload.InCoverage = ev.Kind == eventbus.KindWindowOpened || ev.Kind == eventbus.KindWindowOpening
+			}
 		}
 
 		payload.UntilNextTransition = finiteSec(payload.UntilNextTransition)
@@ -95,10 +120,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		msg := fmt.Sprintf("event: coverage\ndata: %s\n\n", data)
-		select {
-		case ch <- []byte(msg):
-		default:
-		}
+		sseEnqueueDrop(ch, []byte(msg))
 	})
 
 	// Subscribe to link-state events.
@@ -116,10 +138,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		msg := fmt.Sprintf("event: linkstate\ndata: %s\n\n", data)
-		select {
-		case ch <- []byte(msg):
-		default: // drop if channel full
-		}
+		sseEnqueueDrop(ch, []byte(msg))
 	})
 
 	// Subscribe to observability events to forward replay lifecycle signals.
@@ -128,10 +147,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		msg := fmt.Sprintf("event: lifecycle\ndata: %s\n\n", `{"kind":"replay_done"}`)
-		select {
-		case ch <- []byte(msg):
-		default:
-		}
+		sseEnqueueDrop(ch, []byte(msg))
 	})
 
 	unsubMessage := s.bus.SubscribeMessage(func(ev eventbus.MessageEvent) {
@@ -147,10 +163,23 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		msg := fmt.Sprintf("event: message\ndata: %s\n\n", data)
-		select {
-		case ch <- []byte(msg):
-		default:
+		sseEnqueueDrop(ch, []byte(msg))
+	})
+
+	unsubHandover := s.bus.SubscribeHandover(func(ev eventbus.HandoverEvent) {
+		payload := map[string]any{
+			"from":      ev.From,
+			"to":        ev.To,
+			"reason":    ev.Reason,
+			"at":        ev.At.Format(time.RFC3339),
+			"device_id": ev.DeviceID,
 		}
+		data, err := json.Marshal(payload)
+		if err != nil {
+			return
+		}
+		msg := []byte(fmt.Sprintf("event: handover\ndata: %s\n\n", data))
+		sseEnqueueReliable(clientCtx, ch, msg)
 	})
 
 	// Subscribe to satellite position events (TLE mode only).
@@ -175,16 +204,13 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		msg := fmt.Sprintf("event: satellite_position\ndata: %s\n\n", data)
-		select {
-		case ch <- []byte(msg):
-		default:
-		}
+		sseEnqueueDrop(ch, []byte(msg))
 	})
 
 	flusher.Flush()
 
 	// Write loop: stream events until client disconnects.
-	ctx := r.Context()
+	ctx := clientCtx
 
 	// Send session_info as the very first event.
 	if s.sessionInfo != nil {
@@ -223,6 +249,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 			unsubLinkState()
 			unsubObs()
 			unsubMessage()
+			unsubHandover()
 			unsubPosition()
 			return
 		case msg := <-ch:

@@ -108,6 +108,8 @@ Continuous GEO with surprise tunnel drops: `./scripts/demo-blockage.sh`
 ([Profiles](guides/profiles.md)).
 Voice-grade estimates + synthetic calls: `./scripts/demo-voice.sh`
 ([Report](guides/report.md)).
+Dual-path cellular↔satellite handover: `./scripts/demo-handover.sh`
+([Profiles](guides/profiles.md)).
 
 <img src="guides/images/tui.png" alt="TUI Dashboard" width="800">
 

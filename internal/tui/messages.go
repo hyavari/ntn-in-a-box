@@ -61,6 +61,15 @@ type MessageLifecycleMsg struct {
 	At     time.Time
 }
 
+// HandoverMsg reports an egress bearer switch (dual-path fallback).
+type HandoverMsg struct {
+	From     string
+	To       string
+	Reason   string
+	DeviceID string
+	At       time.Time
+}
+
 // messageRow is one row in the TUI message list.
 type messageRow struct {
 	ID     string

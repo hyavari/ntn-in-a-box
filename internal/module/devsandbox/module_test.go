@@ -11,6 +11,7 @@ import (
 
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/condition"
 	"github.com/hyavari/ntn-in-a-box/internal/kernel/eventbus"
+	"github.com/hyavari/ntn-in-a-box/internal/module/devsandbox/path"
 )
 
 // mockShaper records calls to Apply and SetFullLoss.
@@ -18,12 +19,16 @@ type mockShaper struct {
 	mu       sync.Mutex
 	applies  []condition.LinkState
 	fullLoss int
+	onApply  func()
 }
 
 func (m *mockShaper) Apply(_ context.Context, state condition.LinkState) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.applies = append(m.applies, state)
+	if m.onApply != nil {
+		m.onApply()
+	}
 	return nil
 }
 
@@ -289,5 +294,207 @@ func TestEmitCalledOnTransitions(t *testing.T) {
 	}
 	if events[1].Name != "devsandbox.coverage_lost" {
 		t.Errorf("event[1].Name = %q, want devsandbox.coverage_lost", events[1].Name)
+	}
+}
+
+type mockRouter struct {
+	mu       sync.Mutex
+	gateways []string
+	failNext bool
+	failErr  error
+	onSet    func(gateway string)
+}
+
+func (r *mockRouter) SetDefaultVia(_ context.Context, gatewayIP string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.onSet != nil {
+		r.onSet(gatewayIP)
+	}
+	if r.failNext {
+		r.failNext = false
+		if r.failErr != nil {
+			return r.failErr
+		}
+		return context.DeadlineExceeded
+	}
+	r.gateways = append(r.gateways, gatewayIP)
+	return nil
+}
+
+func (r *mockRouter) gatewaysCopy() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]string, len(r.gateways))
+	copy(out, r.gateways)
+	return out
+}
+
+func TestDualPath_InitTerrestrialFailClosed(t *testing.T) {
+	sat := &mockShaper{}
+	mod := NewWithOptions(sat, Options{
+		Router:      &mockRouter{},
+		Paths:       path.New(true),
+		Bus:         eventbus.New(eventbus.DefaultLinkStateThrottle),
+		SatGateway:  "10.200.0.1",
+		TerrGateway: "10.200.1.1",
+	})
+	if err := mod.InitBearer(false); err != nil {
+		t.Fatal(err)
+	}
+	if mod.SelectedBearer() != path.BearerTerrestrial {
+		t.Fatalf("bearer = %q", mod.SelectedBearer())
+	}
+	if sat.fullLossCount() < 1 {
+		t.Fatal("expected sat full loss when init on terrestrial")
+	}
+}
+
+func TestDualPath_ReconcileRouteBeforeBearer(t *testing.T) {
+	sat := &mockShaper{}
+	router := &mockRouter{}
+	bus := eventbus.New(eventbus.DefaultLinkStateThrottle)
+	var handovers []eventbus.HandoverEvent
+	bus.SubscribeHandover(func(ev eventbus.HandoverEvent) {
+		handovers = append(handovers, ev)
+	})
+
+	mod := NewWithOptions(sat, Options{
+		Router:      router,
+		Paths:       path.New(true),
+		Bus:         bus,
+		DeviceID:    "sandbox-0",
+		SatGateway:  "10.200.0.1",
+		TerrGateway: "10.200.1.1",
+	})
+	if err := mod.InitBearer(true); err != nil {
+		t.Fatal(err)
+	}
+	if mod.SelectedBearer() != path.BearerSatellite {
+		t.Fatalf("bearer = %q", mod.SelectedBearer())
+	}
+	if got := router.gatewaysCopy(); len(got) != 1 || got[0] != "10.200.0.1" {
+		t.Fatalf("init gateways = %v", got)
+	}
+
+	mod.OnCoverageEvent(eventbus.CoverageEvent{
+		Kind: eventbus.KindWindowClosed, At: time.Now(), InBlockage: true,
+	})
+	if mod.SelectedBearer() != path.BearerTerrestrial {
+		t.Fatalf("after close bearer = %q", mod.SelectedBearer())
+	}
+	if sat.fullLossCount() < 1 {
+		t.Fatal("expected fail-closed full loss before leaving satellite")
+	}
+	if len(handovers) != 1 || handovers[0].Reason != path.ReasonBlocked {
+		t.Fatalf("handovers = %+v", handovers)
+	}
+
+	mod.OnCoverageEvent(eventbus.CoverageEvent{
+		Kind: eventbus.KindWindowOpened, At: time.Now(),
+	})
+	if mod.SelectedBearer() != path.BearerSatellite {
+		t.Fatalf("after open bearer = %q", mod.SelectedBearer())
+	}
+	if len(handovers) != 2 || handovers[1].Reason != path.ReasonUnblocked {
+		t.Fatalf("handovers = %+v", handovers)
+	}
+}
+
+func TestDualPath_RouteFailureDoesNotCommitBearer(t *testing.T) {
+	sat := &mockShaper{}
+	router := &mockRouter{}
+	bus := eventbus.New(eventbus.DefaultLinkStateThrottle)
+	var handovers []eventbus.HandoverEvent
+	bus.SubscribeHandover(func(ev eventbus.HandoverEvent) {
+		handovers = append(handovers, ev)
+	})
+
+	mod := NewWithOptions(sat, Options{
+		Router:      router,
+		Paths:       path.New(true),
+		Bus:         bus,
+		SatGateway:  "10.200.0.1",
+		TerrGateway: "10.200.1.1",
+	})
+	if err := mod.InitBearer(true); err != nil {
+		t.Fatal(err)
+	}
+
+	router.failNext = true
+	mod.OnCoverageEvent(eventbus.CoverageEvent{
+		Kind: eventbus.KindWindowClosed, At: time.Now(),
+	})
+	if mod.SelectedBearer() != path.BearerSatellite {
+		t.Fatalf("bearer advanced despite route failure: %q", mod.SelectedBearer())
+	}
+	if len(handovers) != 0 {
+		t.Fatalf("unexpected handover on failed route: %+v", handovers)
+	}
+	if sat.fullLossCount() < 1 {
+		t.Fatal("sat should still be fail-closed at full loss")
+	}
+}
+
+func TestDualPath_RestoreSatShaperBeforeRoute(t *testing.T) {
+	sat := &mockShaper{}
+	router := &mockRouter{}
+	var order []string
+	sat.onApply = func() { order = append(order, "apply") }
+	router.onSet = func(string) { order = append(order, "route") }
+
+	mod := NewWithOptions(sat, Options{
+		Router:      router,
+		Paths:       path.New(true),
+		Bus:         eventbus.New(eventbus.DefaultLinkStateThrottle),
+		SatGateway:  "10.200.0.1",
+		TerrGateway: "10.200.1.1",
+	})
+	if err := mod.InitBearer(true); err != nil {
+		t.Fatal(err)
+	}
+	state := condition.LinkState{DelayMs: 40, JitterMs: 5, LossPct: 0.2, BandwidthKbps: 20000}
+	mod.OnLinkState(eventbus.LinkStateEvent{State: state, At: time.Now()})
+	sat.waitApply(t, 1)
+
+	mod.OnCoverageEvent(eventbus.CoverageEvent{Kind: eventbus.KindWindowClosed, At: time.Now()})
+	order = nil
+	mod.OnCoverageEvent(eventbus.CoverageEvent{Kind: eventbus.KindWindowOpened, At: time.Now()})
+
+	if len(order) < 2 || order[0] != "apply" || order[1] != "route" {
+		t.Fatalf("return-to-sat order = %v, want [apply route ...]", order)
+	}
+}
+
+func TestDualPath_FastCloseOpenNoStaleTerr(t *testing.T) {
+	sat := &mockShaper{}
+	router := &mockRouter{}
+	seen := make(chan string, 8)
+	router.onSet = func(gw string) { seen <- gw }
+
+	mod := NewWithOptions(sat, Options{
+		Router:      router,
+		Paths:       path.New(true),
+		Bus:         eventbus.New(eventbus.DefaultLinkStateThrottle),
+		SatGateway:  "10.200.0.1",
+		TerrGateway: "10.200.1.1",
+	})
+	if err := mod.InitBearer(true); err != nil {
+		t.Fatal(err)
+	}
+	<-seen // init sat
+
+	mod.OnCoverageEvent(eventbus.CoverageEvent{Kind: eventbus.KindWindowClosed, At: time.Now()})
+	mod.OnCoverageEvent(eventbus.CoverageEvent{Kind: eventbus.KindWindowOpened, At: time.Now()})
+
+	if mod.SelectedBearer() != path.BearerSatellite {
+		t.Fatalf("final bearer = %q, want satellite", mod.SelectedBearer())
+	}
+	gws := router.gatewaysCopy()
+	if len(gws) < 3 {
+		t.Fatalf("gateways = %v, want init+terr+sat", gws)
+	}
+	if gws[len(gws)-1] != "10.200.0.1" {
+		t.Fatalf("last gateway = %q, want sat (no stale terr win)", gws[len(gws)-1])
 	}
 }

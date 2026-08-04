@@ -55,7 +55,18 @@ type Server struct {
 	evaluators      map[string]condition.Eval
 	storeAndForward bool
 	onDeviceReg     func(deviceID string, eval condition.Eval)
+	pathInfo        PathInfoFunc
 }
+
+// PathInfo is additive dual-path state for condition responses.
+type PathInfo struct {
+	SelectedBearer string
+	Terrestrial    profile.TerrestrialImpairments
+}
+
+// PathInfoFunc returns dual-path state for a device. ok is false when
+// terrestrial fallback is not enabled for that device.
+type PathInfoFunc func(deviceID string) (info PathInfo, ok bool)
 
 // Config holds what the server needs to start.
 type Config struct {
@@ -91,6 +102,14 @@ func New(cfg Config) *Server {
 // Handler returns the http.Handler for use in tests or custom servers.
 func (s *Server) Handler() http.Handler {
 	return s.mux
+}
+
+// SetPathInfoFunc registers a callback that enriches condition responses
+// with selected_bearer and path snapshots when terrestrial fallback is on.
+func (s *Server) SetPathInfoFunc(fn PathInfoFunc) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pathInfo = fn
 }
 
 // Handle registers a handler for a pattern on the server's mux.
@@ -310,15 +329,30 @@ func (s *Server) handleGetDevice(w http.ResponseWriter, r *http.Request) {
 }
 
 type conditionResponse struct {
-	InCoverage             bool    `json:"in_coverage"`
-	ElapsedSec             float64 `json:"elapsed_sec"`
-	UntilNextTransitionSec float64 `json:"until_next_transition_sec"`
-	CyclePosSec            float64 `json:"cycle_pos_sec"`
-	InBlockage             bool    `json:"in_blockage,omitempty"`
-	DelayMs                float64 `json:"delay_ms,omitempty"`
-	JitterMs               float64 `json:"jitter_ms,omitempty"`
-	LossPct                float64 `json:"loss_pct,omitempty"`
-	BandwidthKbps          float64 `json:"bandwidth_kbps,omitempty"`
+	InCoverage             bool            `json:"in_coverage"`
+	ElapsedSec             float64         `json:"elapsed_sec"`
+	UntilNextTransitionSec float64         `json:"until_next_transition_sec"`
+	CyclePosSec            float64         `json:"cycle_pos_sec"`
+	InBlockage             bool            `json:"in_blockage,omitempty"`
+	DelayMs                float64         `json:"delay_ms,omitempty"`
+	JitterMs               float64         `json:"jitter_ms,omitempty"`
+	LossPct                float64         `json:"loss_pct,omitempty"`
+	BandwidthKbps          float64         `json:"bandwidth_kbps,omitempty"`
+	SelectedBearer         string          `json:"selected_bearer,omitempty"`
+	Paths                  *conditionPaths `json:"paths,omitempty"`
+}
+
+type conditionPaths struct {
+	Satellite   pathSnapshot `json:"satellite"`
+	Terrestrial pathSnapshot `json:"terrestrial"`
+}
+
+type pathSnapshot struct {
+	Up            bool    `json:"up"`
+	DelayMs       float64 `json:"delay_ms,omitempty"`
+	JitterMs      float64 `json:"jitter_ms,omitempty"`
+	LossPct       float64 `json:"loss_pct,omitempty"`
+	BandwidthKbps float64 `json:"bandwidth_kbps,omitempty"`
 }
 
 func (s *Server) handleGetCondition(w http.ResponseWriter, r *http.Request) {
@@ -361,6 +395,30 @@ func (s *Server) handleGetCondition(w http.ResponseWriter, r *http.Request) {
 		}
 		if isFinite(link.BandwidthKbps) {
 			resp.BandwidthKbps = link.BandwidthKbps
+		}
+	}
+
+	s.mu.RLock()
+	pathFn := s.pathInfo
+	s.mu.RUnlock()
+	if pathFn != nil {
+		if info, ok := pathFn(id); ok {
+			resp.SelectedBearer = info.SelectedBearer
+			sat := pathSnapshot{Up: cov.InCoverage}
+			if cov.InCoverage {
+				sat.DelayMs = resp.DelayMs
+				sat.JitterMs = resp.JitterMs
+				sat.LossPct = resp.LossPct
+				sat.BandwidthKbps = resp.BandwidthKbps
+			}
+			terr := pathSnapshot{
+				Up:            true,
+				DelayMs:       info.Terrestrial.DelayMs,
+				JitterMs:      info.Terrestrial.JitterMs,
+				LossPct:       info.Terrestrial.LossPctValue(),
+				BandwidthKbps: info.Terrestrial.BandwidthKbps,
+			}
+			resp.Paths = &conditionPaths{Satellite: sat, Terrestrial: terr}
 		}
 	}
 

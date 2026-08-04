@@ -60,22 +60,43 @@ func (m Model) renderCoverageStatus(_ int) string {
 		}
 		return " " + styleDim.Render("▶ REPLAYING")
 	}
+	bearer := m.bearerSuffix()
 	if m.inCoverage {
 		if m.focusDeviceID != "" {
-			return " " + styleStatusGreen.Render("▲ "+m.focusDeviceID+" IN COVERAGE")
+			return " " + styleStatusGreen.Render("▲ "+m.focusDeviceID+" IN COVERAGE"+bearer)
 		}
-		return " " + styleStatusGreen.Render("▲ IN COVERAGE")
+		return " " + styleStatusGreen.Render("▲ IN COVERAGE"+bearer)
 	}
 	if m.inBlockage {
-		if m.focusDeviceID != "" {
-			return " " + styleStatusRed.Render("▼ "+m.focusDeviceID+" BLOCKED")
+		label := "BLOCKED" + bearer
+		if m.selectedBearer == "terrestrial" {
+			label = "BLOCKED · via TERR"
 		}
-		return " " + styleStatusRed.Render("▼ BLOCKED")
+		if m.focusDeviceID != "" {
+			return " " + styleStatusRed.Render("▼ "+m.focusDeviceID+" "+label)
+		}
+		return " " + styleStatusRed.Render("▼ "+label)
+	}
+	label := "OUT OF COVERAGE" + bearer
+	if m.selectedBearer == "terrestrial" {
+		label = "OUT · via TERR"
 	}
 	if m.focusDeviceID != "" {
-		return " " + styleStatusRed.Render("▼ "+m.focusDeviceID+" OUT OF COVERAGE")
+		return " " + styleStatusRed.Render("▼ "+m.focusDeviceID+" "+label)
 	}
-	return " " + styleStatusRed.Render("▼ OUT OF COVERAGE")
+	return " " + styleStatusRed.Render("▼ "+label)
+}
+
+// bearerSuffix is a short dual-path label, or empty when fallback is off.
+func (m Model) bearerSuffix() string {
+	switch m.selectedBearer {
+	case "satellite":
+		return " · SAT"
+	case "terrestrial":
+		return " · TERR"
+	default:
+		return ""
+	}
 }
 
 // renderProgressBar renders a colored progress bar with percentage and
@@ -318,9 +339,11 @@ func (m Model) renderStackedHeader() string {
 			status = styleDim.Render(fmt.Sprintf("▶ %.0f%%", pct))
 		}
 	case m.inCoverage:
-		status = styleStatusGreen.Render("▲ IN")
+		status = styleStatusGreen.Render("▲ IN" + m.bearerSuffix())
+	case m.selectedBearer == "terrestrial":
+		status = styleStatusRed.Render("▼ via TERR")
 	default:
-		status = styleStatusRed.Render("▼ OUT")
+		status = styleStatusRed.Render("▼ OUT" + m.bearerSuffix())
 	}
 
 	metrics := ""

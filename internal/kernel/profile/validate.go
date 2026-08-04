@@ -32,8 +32,68 @@ func (p *Profile) Validate() error {
 	errs = append(errs, validateCurve("bandwidth_kbps", p.Curves.BandwidthKbps, validRange, false)...)
 
 	errs = append(errs, p.validateBlockages()...)
+	errs = append(errs, p.validateTerrestrial()...)
 
 	return errors.Join(errs...)
+}
+
+// validateTerrestrial fills defaults when fallback is enabled and checks
+// impairment fields are physically sane. Fields are ignored when fallback
+// is off.
+func (p *Profile) validateTerrestrial() []error {
+	if !p.TerrestrialFallback {
+		return nil
+	}
+	p.applyTerrestrialDefaults()
+
+	var errs []error
+	t := p.Terrestrial
+	check := func(name string, v float64, percent bool) {
+		if math.IsNaN(v) {
+			errs = append(errs, fmt.Errorf("terrestrial.%s must not be NaN", name))
+			return
+		}
+		if v < 0 {
+			errs = append(errs, fmt.Errorf("terrestrial.%s must be >= 0, got %.2f", name, v))
+		}
+		if percent && v > 100 {
+			errs = append(errs, fmt.Errorf("terrestrial.%s must be <= 100, got %.2f", name, v))
+		}
+	}
+	check("delay_ms", t.DelayMs, false)
+	check("jitter_ms", t.JitterMs, false)
+	check("loss_pct", t.LossPctValue(), true)
+	check("bandwidth_kbps", t.BandwidthKbps, false)
+	if !math.IsNaN(t.BandwidthKbps) && t.BandwidthKbps <= 0 {
+		errs = append(errs, errors.New("terrestrial.bandwidth_kbps must be > 0"))
+	}
+	return errs
+}
+
+// applyTerrestrialDefaults fills terrestrial impairments from the light
+// cellular-ish preset. When the terrestrial block is entirely unset, every
+// field is filled. Otherwise zero delay/jitter/bandwidth are filled, and a
+// nil loss_pct gets the preset (explicit 0 is preserved via pointer).
+func (p *Profile) applyTerrestrialDefaults() {
+	d := DefaultTerrestrialImpairments()
+	t := p.Terrestrial
+	if t.DelayMs == 0 && t.JitterMs == 0 && t.LossPct == nil && t.BandwidthKbps == 0 {
+		p.Terrestrial = d
+		return
+	}
+	if p.Terrestrial.DelayMs == 0 {
+		p.Terrestrial.DelayMs = d.DelayMs
+	}
+	if p.Terrestrial.JitterMs == 0 {
+		p.Terrestrial.JitterMs = d.JitterMs
+	}
+	if p.Terrestrial.LossPct == nil {
+		loss := d.LossPctValue()
+		p.Terrestrial.LossPct = &loss
+	}
+	if p.Terrestrial.BandwidthKbps == 0 {
+		p.Terrestrial.BandwidthKbps = d.BandwidthKbps
+	}
 }
 
 // validateBlockages checks that blockage intervals are well-formed: each

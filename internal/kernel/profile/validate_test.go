@@ -52,6 +52,66 @@ func TestValidate_ValidContinuousProfile(t *testing.T) {
 	}
 }
 
+func TestValidate_TerrestrialFallbackDefaults(t *testing.T) {
+	p := validPeriodic()
+	p.TerrestrialFallback = true
+	if err := p.Validate(); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	d := DefaultTerrestrialImpairments()
+	if p.Terrestrial.DelayMs != d.DelayMs ||
+		p.Terrestrial.JitterMs != d.JitterMs ||
+		p.Terrestrial.BandwidthKbps != d.BandwidthKbps ||
+		p.Terrestrial.LossPctValue() != d.LossPctValue() {
+		t.Fatalf("defaults = %+v (loss=%v), want %+v (loss=%v)",
+			p.Terrestrial, p.Terrestrial.LossPctValue(), d, d.LossPctValue())
+	}
+}
+
+func TestValidate_TerrestrialFallbackPreservesZeroLoss(t *testing.T) {
+	p := validPeriodic()
+	p.TerrestrialFallback = true
+	zero := 0.0
+	p.Terrestrial = TerrestrialImpairments{
+		DelayMs:       40,
+		JitterMs:      2,
+		LossPct:       &zero,
+		BandwidthKbps: 5000,
+	}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if p.Terrestrial.LossPctValue() != 0 {
+		t.Fatalf("loss_pct = %v, want 0 (explicit zero must not be overwritten)", p.Terrestrial.LossPctValue())
+	}
+}
+
+func TestValidate_TerrestrialFallbackZeroLossOnlyYAML(t *testing.T) {
+	p := validPeriodic()
+	p.TerrestrialFallback = true
+	zero := 0.0
+	p.Terrestrial = TerrestrialImpairments{LossPct: &zero}
+	if err := p.Validate(); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if p.Terrestrial.LossPctValue() != 0 {
+		t.Fatalf("loss_pct = %v, want 0", p.Terrestrial.LossPctValue())
+	}
+	d := DefaultTerrestrialImpairments()
+	if p.Terrestrial.DelayMs != d.DelayMs || p.Terrestrial.BandwidthKbps != d.BandwidthKbps {
+		t.Fatalf("partial defaults not applied: %+v", p.Terrestrial)
+	}
+}
+
+func TestValidate_TerrestrialFallbackRejectsNegative(t *testing.T) {
+	p := validPeriodic()
+	p.TerrestrialFallback = true
+	p.Terrestrial.DelayMs = -1
+	if err := p.Validate(); err == nil {
+		t.Fatal("expected error for negative delay")
+	}
+}
+
 func TestValidate_RejectsInvalidProfiles(t *testing.T) {
 	tests := []struct {
 		name   string

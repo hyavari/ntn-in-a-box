@@ -1,0 +1,28 @@
+name: geo_blockage_handover
+description: >
+  Continuous GEO link with surprise blockages and terrestrial fallback.
+  While the satellite path is blocked or otherwise out of coverage, the
+  sandbox switches its default route to a light terrestrial egress so
+  applications can keep sending. Satellite impairments match geo_blockage;
+  terrestrial uses the default light cellular-ish preset unless overridden.
+
+schedule:
+  mode: continuous
+  period_sec: 120
+  lookahead_sec: 0
+
+blockages:
+  - { offset_sec: 30, duration_sec: 15 }
+  - { offset_sec: 80, duration_sec: 10 }
+
+curves:
+  delay_ms:
+    - { offset_sec: 0, value: 600 }
+  jitter_ms:
+    - { offset_sec: 0, value: 15 }
+  loss_pct:
+    - { offset_sec: 0, value: 0.5 }
+  bandwidth_kbps:
+    - { offset_sec: 0, value: 20000 }
+
+terrestrial_fallback: true
